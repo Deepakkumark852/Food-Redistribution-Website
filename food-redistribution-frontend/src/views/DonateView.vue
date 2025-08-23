@@ -1,7 +1,10 @@
 <template>
   <div class="container">
-    <div class="row justify-content-center">
-      <div class="col-lg-8">
+    <div class="row">
+      <div class="col-md-4 mb-3 mb-md-0">
+        <HistorySidebar />
+      </div>
+      <div class="col-md-8">
         <div class="card mb-4">
           <div class="card-header bg-white">
             <h4 class="my-1"><i class="fas fa-donate me-2"></i> Donate Food</h4>
@@ -54,6 +57,7 @@
 <script setup>
 import { ref } from 'vue';
 import api from '../api';
+import HistorySidebar from '../components/HistorySidebar.vue';
 const food_name = ref('');
 const quantity = ref(1);
 const expiry_date = ref('');

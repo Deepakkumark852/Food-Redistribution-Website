@@ -4,7 +4,7 @@ def create_tables(app, mysql):
     with app.app_context():
         cur = mysql.connection.cursor()
         
-        # Users table with role column for RBAC
+        # Users table with roles column for RBAC (comma-separated roles)
         cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -12,7 +12,7 @@ def create_tables(app, mysql):
             password VARCHAR(255) NOT NULL,
             email VARCHAR(120) UNIQUE NOT NULL,
             mobile VARCHAR(20) NOT NULL,
-            role ENUM('donor', 'requester', 'volunteer', 'admin') NOT NULL DEFAULT 'donor',
+            roles VARCHAR(255) NOT NULL DEFAULT 'donor',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """)

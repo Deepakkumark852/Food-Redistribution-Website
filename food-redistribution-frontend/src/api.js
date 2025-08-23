@@ -1,4 +1,5 @@
 // This file will be used to configure Axios for API calls to the Flask backend
+import store from './store';
 import axios from 'axios';
 
 const api = axios.create({
@@ -10,9 +11,13 @@ const api = axios.create({
 
 // Add a request interceptor to include JWT token if present
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  let token = store.state.token;
+  if (!token) {
+    const user = JSON.parse(localStorage.getItem('user'));
+    token = user?.token;
+  }
   if (token) {
-    config.headers['Authorization'] = `Bearer ${token}`;
+    config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });

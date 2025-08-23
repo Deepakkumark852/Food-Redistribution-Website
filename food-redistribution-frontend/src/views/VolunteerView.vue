@@ -1,28 +1,35 @@
 <template>
   <div class="container">
     <div class="row">
-      <div class="col-12">
-        <h2 class="mb-4"><i class="fas fa-people-carry me-2"></i>Volunteer Dashboard</h2>
+      <div class="col-md-4 mb-3 mb-md-0">
+        <HistorySidebar />
       </div>
-    </div>
-    <div class="row">
-      <div class="col-md-6">
-        <div class="card mb-4">
-          <div class="card-header bg-white">
-            <h5 class="my-1">Pending Requests</h5>
-          </div>
-          <div class="card-body">
-            <!-- Pending requests list from API goes here -->
+      <div class="col-md-8">
+        <div class="row">
+          <div class="col-12">
+            <h2 class="mb-4"><i class="fas fa-people-carry me-2"></i>Volunteer Dashboard</h2>
           </div>
         </div>
-      </div>
-      <div class="col-md-6">
-        <div class="card mb-4">
-          <div class="card-header bg-white">
-            <h5 class="my-1">My Assignments</h5>
+        <div class="row">
+          <div class="col-md-6">
+            <div class="card mb-4">
+              <div class="card-header bg-white">
+                <h5 class="my-1">Pending Requests</h5>
+              </div>
+              <div class="card-body">
+                <!-- Pending requests list from API goes here -->
+              </div>
+            </div>
           </div>
-          <div class="card-body">
-            <!-- My assignments list from API goes here -->
+          <div class="col-md-6">
+            <div class="card mb-4">
+              <div class="card-header bg-white">
+                <h5 class="my-1">My Assignments</h5>
+              </div>
+              <div class="card-body">
+                <!-- My assignments list from API goes here -->
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -30,6 +37,7 @@
   </div>
 </template>
 <script setup>
+import HistorySidebar from '../components/HistorySidebar.vue';
 // You can use axios/api.js to fetch data for volunteer dashboard
 </script>
 <style scoped>

@@ -47,12 +47,16 @@
           </div>
         </div>
       </div>
+      <div class="col-md-4 mb-3 mb-md-0">
+        <HistorySidebar />
+      </div>
     </div>
   </div>
 </template>
 <script setup>
 import { ref } from 'vue';
 import api from '../api';
+import HistorySidebar from '../components/HistorySidebar.vue';
 const food_id = ref('');
 const quantity = ref(1);
 const delivery_address = ref('');

@@ -36,19 +36,25 @@
 import { ref } from 'vue';
 import api from '../api';
 import { useRouter } from 'vue-router';
+import { useStore } from 'vuex';
+
 const username = ref('');
 const password = ref('');
 const remember = ref(false);
 const error = ref('');
 const router = useRouter();
+const store = useStore();
+
 const login = async () => {
   error.value = '';
   try {
     const res = await api.post('/login', { username: username.value, password: password.value });
-    localStorage.setItem('token', res.data.access_token);
-    localStorage.setItem('role', res.data.role);
-    localStorage.setItem('username', username.value);
-    router.push('/donate');
+    store.commit('setUser', {
+      token: res.data.access_token,
+      roles: res.data.roles,
+      username: username.value,
+    });
+    router.push('/home');
   } catch (e) {
     error.value = e.response?.data?.error || 'Login failed';
   }
