@@ -4,6 +4,7 @@ from datetime import datetime, date, time, timedelta
 from werkzeug.security import generate_password_hash
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt
 from functools import wraps
+import os
 
 # RBAC decorator
 def role_required(*roles):
@@ -227,24 +228,20 @@ def init_routes(app, mysql):
     def get_food_details(food_id):
         cur = mysql.connection.cursor()
         cur.execute("""
-            SELECT d.*, u.username AS donor_name
+            SELECT d.*, u.username AS donor_name, u.email AS donor_email, u.mobile AS donor_mobile
             FROM donations d
             JOIN users u ON d.donor_id = u.id
             WHERE d.id = %s
         """, [food_id])
         food = cur.fetchone()
         cur.close()
-        
         if food:
-            return jsonify({
-                'id': food['id'],
-                'food_name': food['food_name'],
-                'quantity': food['quantity'],
-                'donor_name': food['donor_name'],
-                'expiry_date': str(food['expiry_date']),
-                'pickup_address': food['pickup_address'],
-                'pickup_time': str(food['pickup_time'])
-            })
+            from datetime import datetime, date, time, timedelta
+            def serialize(v):
+                if isinstance(v, (datetime, date, time, timedelta)):
+                    return v.isoformat() if hasattr(v, 'isoformat') else str(v)
+                return v
+            return jsonify({k: serialize(v) for k, v in food.items()})
         return jsonify({'error': 'Food not found'}), 404
 
     @app.route('/api/register', methods=['POST'])
@@ -304,39 +301,89 @@ def init_routes(app, mysql):
     @app.route('/api/donate', methods=['POST'])
     @role_required('donor', 'admin')
     def api_donate():
-        print('DEBUG /api/donate raw data:', request.data)
-        print('DEBUG /api/donate content-type:', request.content_type)
+        from googlemaps_helper import geocode_address, reverse_geocode
         data = request.get_json(silent=True)
-        print('DEBUG /api/donate get_json:', data)
         claims = get_jwt()
         user_id = claims.get('id')
+        api_key = os.environ.get('GOOGLE_MAPS_API_KEY')
         try:
+            address = data.get('pickup_address')
+            lat = data.get('latitude')
+            lng = data.get('longitude')
+            if address and (not lat or not lng):
+                lat, lng = geocode_address(address, api_key)
+            if (lat and lng) and not address:
+                address = reverse_geocode(lat, lng, api_key)
             food_data = {
                 'food_name': data['food_name'],
                 'quantity': int(data['quantity']),
                 'expiry_date': data['expiry_date'],
-                'pickup_address': data['pickup_address'],
+                'pickup_address': address,
                 'pickup_time': data['pickup_time'],
                 'special_instructions': data.get('special_instructions', ''),
-                'donor_id': user_id
+                'donor_id': user_id,
+                'latitude': lat,
+                'longitude': lng,
+                'food_image_base64': data.get('food_image_base64') or None
             }
         except (KeyError, ValueError, TypeError) as e:
-            print('DEBUG /api/donate error:', str(e))
             return jsonify({'error': f'Invalid or missing field: {str(e)}'}), 422
         try:
             cur = mysql.connection.cursor()
             cur.execute("""
                 INSERT INTO donations 
-                (food_name, quantity, expiry_date, pickup_address, pickup_time, special_instructions, donor_id)
-                VALUES (%(food_name)s, %(quantity)s, %(expiry_date)s, %(pickup_address)s, %(pickup_time)s, %(special_instructions)s, %(donor_id)s)
+                (food_name, quantity, expiry_date, pickup_address, pickup_time, special_instructions, donor_id, latitude, longitude, food_image_base64)
+                VALUES (%(food_name)s, %(quantity)s, %(expiry_date)s, %(pickup_address)s, %(pickup_time)s, %(special_instructions)s, %(donor_id)s, %(latitude)s, %(longitude)s, %(food_image_base64)s)
             """, food_data)
             mysql.connection.commit()
             cur.close()
             return jsonify({'msg': 'Food donation submitted successfully!'}), 201
         except Exception as e:
             mysql.connection.rollback()
-            print('DEBUG /api/donate DB error:', str(e))
             return jsonify({'error': str(e)}), 400
+
+    # --- New endpoint: Get donations, optionally sorted by proximity ---
+    @app.route('/api/donations', methods=['GET'])
+    @jwt_required()
+    def get_donations():
+        user_lat = request.args.get('latitude', type=float)
+        user_lng = request.args.get('longitude', type=float)
+        filter_food = request.args.get('food_name')
+        filter_expiry = request.args.get('expiry_date')
+        cur = mysql.connection.cursor()
+        base_query = "SELECT * FROM donations"
+        filters = []
+        params = []
+        if filter_food:
+            filters.append("food_name LIKE %s")
+            params.append(f"%{filter_food}%")
+        if filter_expiry:
+            filters.append("expiry_date = %s")
+            params.append(filter_expiry)
+        if filters:
+            base_query += " WHERE " + " AND ".join(filters)
+        # If user location provided, calculate distance using Haversine formula
+        if user_lat is not None and user_lng is not None:
+            base_query = base_query.replace("SELECT *", "SELECT *, (6371 * acos(cos(radians(%s)) * cos(radians(latitude)) * cos(radians(longitude) - radians(%s)) + sin(radians(%s)) * sin(radians(latitude)))) AS distance")
+            params = [user_lat, user_lng, user_lat] + params
+            base_query += " ORDER BY distance ASC"
+        else:
+            base_query += " ORDER BY created_at DESC"
+        cur.execute(base_query, params)
+        donations = cur.fetchall()
+        cur.close()
+        # Serialize all rows to handle datetime/timedelta
+        def serialize_row(row):
+            from datetime import datetime, date, time, timedelta
+            result = {}
+            for k, v in row.items():
+                if isinstance(v, (datetime, date, time, timedelta)):
+                    result[k] = str(v)
+                else:
+                    result[k] = v
+            return result
+        donations = [serialize_row(d) for d in donations]
+        return jsonify({'donations': donations})
 
     @app.route('/api/profile', methods=['GET'])
     @jwt_required()
@@ -479,3 +526,46 @@ def init_routes(app, mysql):
     def check_password_hash(hashed_password, password):
         from werkzeug.security import check_password_hash
         return check_password_hash(hashed_password, password)
+
+    @app.route('/api/request', methods=['POST'])
+    @role_required('requester', 'admin')
+    def api_request():
+        from googlemaps_helper import geocode_address, reverse_geocode
+        from config import Config
+        data = request.get_json(silent=True)
+        claims = get_jwt()
+        user_id = claims.get('id')
+        api_key = Config.GOOGLE_MAPS_API_KEY
+        try:
+            address = data.get('delivery_address')
+            lat = data.get('latitude')
+            lng = data.get('longitude')
+            # If only address, geocode
+            if address and (not lat or not lng):
+                lat, lng = geocode_address(address, api_key)
+            # If only lat/lng, reverse geocode
+            if (lat and lng) and not address:
+                address = reverse_geocode(lat, lng, api_key)
+            request_data = {
+                'food_id': int(data['food_id']),
+                'requester_id': user_id,
+                'quantity': int(data['quantity']),
+                'delivery_address': address,
+                'transport_arranged': data.get('transport') == 'arranged',
+                'latitude': lat,
+                'longitude': lng
+            }
+        except (KeyError, ValueError, TypeError) as e:
+            return jsonify({'error': f'Invalid or missing field: {str(e)}'}), 422
+        try:
+            cur = mysql.connection.cursor()
+            cur.execute("""
+                INSERT INTO requests (food_id, requester_id, quantity, delivery_address, transport_arranged, latitude, longitude)
+                VALUES (%(food_id)s, %(requester_id)s, %(quantity)s, %(delivery_address)s, %(transport_arranged)s, %(latitude)s, %(longitude)s)
+            """, request_data)
+            mysql.connection.commit()
+            cur.close()
+            return jsonify({'msg': 'Request submitted successfully!'}), 201
+        except Exception as e:
+            mysql.connection.rollback()
+            return jsonify({'error': str(e)}), 400

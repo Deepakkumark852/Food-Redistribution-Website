@@ -6,6 +6,7 @@ import RequestView from '../views/RequestView.vue';
 import VolunteerView from '../views/VolunteerView.vue';
 import HistoryView from '../views/HistoryView.vue';
 import HomeView from '../views/HomeView.vue';
+import FoodDetailView from '../views/FoodDetailView.vue';
 import api from '../api';
 import store from '../store';
 
@@ -18,6 +19,7 @@ const routes = [
   { path: '/request', component: RequestView, meta: { roles: ['requester', 'admin'] } },
   { path: '/volunteer', component: VolunteerView, meta: { roles: ['volunteer', 'admin'] } },
   { path: '/history', name: 'History', component: HistoryView, meta: { roles: ['donor', 'requester', 'volunteer', 'admin'] } },
+  { path: '/food/:id', component: FoodDetailView, meta: { roles: ['donor', 'requester', 'volunteer', 'admin'] } },
   { path: '/home', name: 'Home', component: HomeView },
 ];
 

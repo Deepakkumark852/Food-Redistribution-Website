@@ -35,12 +35,15 @@
                 </div>
               </div>
               <div class="mb-3">
-                <label for="pickup_address" class="form-label">Pickup Address</label>
-                <textarea v-model="pickup_address" class="form-control" id="pickup_address" rows="3" required></textarea>
+                <label class="form-label">Pickup Location</label>
+                <GoogleMapPicker v-model="location" aspect-ratio="16/9" placeholder="Search or pick location..." />
               </div>
               <div class="mb-3">
                 <label for="special_instructions" class="form-label">Special Instructions</label>
                 <textarea v-model="special_instructions" class="form-control" id="special_instructions" rows="2"></textarea>
+              </div>
+              <div class="mb-3">
+                <FoodImageUploader v-model="food_image_base64" />
               </div>
               <div class="d-grid">
                 <button type="submit" class="btn btn-primary">Submit Donation</button>
@@ -58,26 +61,45 @@
 import { ref } from 'vue';
 import api from '../api';
 import HistorySidebar from '../components/HistorySidebar.vue';
+import GoogleMapPicker from '../components/GoogleMapPicker.vue';
+import FoodImageUploader from '../components/FoodImageUploader.vue';
+
 const food_name = ref('');
 const quantity = ref(1);
 const expiry_date = ref('');
-const pickup_address = ref('');
 const pickup_time = ref('');
 const special_instructions = ref('');
 const error = ref('');
 const success = ref('');
+const location = ref({ address: '', lat: null, lng: null });
+const food_image_base64 = ref('');
+
 const donate = async () => {
   error.value = '';
   success.value = '';
   try {
-    await api.post('/donate', { food_name: food_name.value, quantity: quantity.value, expiry_date: expiry_date.value, pickup_address: pickup_address.value, pickup_time: pickup_time.value, special_instructions: special_instructions.value });
+    const payload = {
+      food_name: food_name.value,
+      quantity: quantity.value,
+      expiry_date: expiry_date.value,
+      pickup_address: location.value.address,
+      pickup_time: pickup_time.value,
+      special_instructions: special_instructions.value,
+      latitude: location.value.lat,
+      longitude: location.value.lng
+    };
+    if (food_image_base64.value) {
+      payload.food_image_base64 = food_image_base64.value;
+    }
+    await api.post('/donate', payload);
     success.value = 'Donation submitted!';
     food_name.value = '';
     quantity.value = 1;
     expiry_date.value = '';
-    pickup_address.value = '';
     pickup_time.value = '';
     special_instructions.value = '';
+    location.value = { address: '', lat: null, lng: null };
+    food_image_base64.value = '';
   } catch (e) {
     error.value = e.response?.data?.error || 'Donation failed';
   }

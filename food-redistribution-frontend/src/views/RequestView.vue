@@ -1,84 +1,116 @@
 <template>
-  <div class="container">
-    <div class="row mb-4">
-      <div class="col-12">
-        <h2 class="mb-3"><i class="fas fa-utensils me-2"></i>Available Food Donations</h2>
-        <!-- Search and Filters UI can be added here -->
+  <div class="container py-3">
+    <div class="row mb-2">
+      <div class="col-12 d-flex flex-wrap align-items-center gap-2">
+        <input v-model="filterFood" @input="fetchDonations" class="form-control w-auto" placeholder="Search food name..." />
+        <input v-model="filterExpiry" @input="fetchDonations" type="date" class="form-control w-auto" placeholder="Expiry date" />
+        <input ref="addressInput" class="form-control w-auto" placeholder="Search location..." style="min-width:220px;" />
+        <button class="btn btn-outline-secondary" @click="fetchDonations">Refresh</button>
       </div>
     </div>
-    <div class="row">
-      <!-- List of donations would go here, fetched from API -->
+    <div class="row mb-3">
+      <div class="col-12">
+        <GoogleMapMultiMarker
+          :userLocation="userLocation"
+          :donors="donations"
+          :highlightId="highlightedId"
+          @marker-click="onMarkerClick"
+        />
+      </div>
     </div>
-    <div class="row justify-content-center">
-      <div class="col-lg-8">
-        <div class="card mb-4">
-          <div class="card-header bg-white">
-            <h4 class="my-1"><i class="fas fa-hands-helping me-2"></i> Request Food</h4>
-          </div>
-          <div class="card-body">
-            <form @submit.prevent="requestFood">
-              <div class="row mb-3">
-                <div class="col-md-6">
-                  <label for="food_id" class="form-label">Food ID</label>
-                  <input v-model.number="food_id" type="number" class="form-control" id="food_id" required />
-                </div>
-                <div class="col-md-6">
-                  <label for="quantity" class="form-label">Quantity</label>
-                  <input v-model.number="quantity" type="number" class="form-control" id="quantity" min="1" required />
-                </div>
+    <div class="row g-2">
+      <div class="col-12">
+        <div v-for="(donation, idx) in filteredDonations" :key="donation.id" :ref="el => cardRefs[donation.id] = el" :class="['donation-card', { 'highlighted': highlightedId === donation.id }]" @click="goToDetails(donation.id)">
+          <div class="card p-3 mb-2 shadow-sm w-100" style="cursor:pointer;">
+            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between">
+              <div>
+                <h5 class="mb-1">{{ donation.food_name }}</h5>
+                <div class="mb-1"><b>Quantity:</b> {{ donation.quantity }}</div>
+                <div class="mb-1"><b>Expires:</b> {{ donation.expiry_date }}</div>
+                <div class="mb-1"><b>Pickup:</b> {{ donation.pickup_address }}</div>
+                <div class="mb-1"><b>Time:</b> {{ donation.pickup_time }}</div>
+                <div class="mb-1"><b>Donor:</b> {{ donation.donor_id }}</div>
+                <div v-if="donation.distance"><b>Distance:</b> {{ donation.distance.toFixed(2) }} km</div>
+                <div v-if="donation.special_instructions" class="small text-muted">{{ donation.special_instructions }}</div>
               </div>
-              <div class="mb-3">
-                <label for="delivery_address" class="form-label">Delivery Address</label>
-                <input v-model="delivery_address" class="form-control" id="delivery_address" required />
+              <div class="ms-md-4 mt-2 mt-md-0">
+                <span class="badge bg-primary">ID: {{ donation.id }}</span>
               </div>
-              <div class="mb-3">
-                <label for="transport" class="form-label">Transport</label>
-                <select v-model="transport" class="form-select" id="transport">
-                  <option value="self">Self</option>
-                  <option value="arranged">Arranged</option>
-                </select>
-              </div>
-              <div class="d-grid">
-                <button type="submit" class="btn btn-primary">Request</button>
-              </div>
-              <div v-if="error" class="alert alert-danger mt-3">{{ error }}</div>
-              <div v-if="success" class="alert alert-success mt-3">{{ success }}</div>
-            </form>
+            </div>
           </div>
         </div>
-      </div>
-      <div class="col-md-4 mb-3 mb-md-0">
-        <HistorySidebar />
       </div>
     </div>
   </div>
 </template>
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted, computed, nextTick } from 'vue';
+import { useRouter } from 'vue-router';
 import api from '../api';
-import HistorySidebar from '../components/HistorySidebar.vue';
-const food_id = ref('');
-const quantity = ref(1);
-const delivery_address = ref('');
-const transport = ref('self');
-const error = ref('');
-const success = ref('');
-const requestFood = async () => {
-  error.value = '';
-  success.value = '';
-  try {
-    await api.post('/request', { food_id: food_id.value, quantity: quantity.value, delivery_address: delivery_address.value, transport: transport.value });
-    success.value = 'Request submitted!';
-    food_id.value = '';
-    quantity.value = 1;
-    delivery_address.value = '';
-    transport.value = 'self';
-  } catch (e) {
-    error.value = e.response?.data?.error || 'Request failed';
+import GoogleMapMultiMarker from '../components/GoogleMapMultiMarker.vue';
+const router = useRouter();
+const userLocation = ref({ address: '', lat: null, lng: null });
+const donations = ref([]);
+const filterFood = ref('');
+const filterExpiry = ref('');
+const highlightedId = ref(null);
+const cardRefs = {};
+const addressInput = ref();
+const fetchDonations = async () => {
+  let params = {};
+  if (userLocation.value.lat && userLocation.value.lng) {
+    params.latitude = userLocation.value.lat;
+    params.longitude = userLocation.value.lng;
   }
+  if (filterFood.value) params.food_name = filterFood.value;
+  if (filterExpiry.value) params.expiry_date = filterExpiry.value;
+  const res = await api.get('/donations', { params });
+  donations.value = res.data.donations || [];
 };
+onMounted(() => {
+  // Try to get current location as default
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(pos => {
+      userLocation.value.lat = pos.coords.latitude;
+      userLocation.value.lng = pos.coords.longitude;
+      fetchDonations();
+    }, fetchDonations);
+  } else {
+    fetchDonations();
+  }
+  // Google Maps Places Autocomplete for address search
+  const waitForGoogle = setInterval(() => {
+    if (window.google && window.google.maps && window.google.maps.places) {
+      clearInterval(waitForGoogle);
+      const autocomplete = new window.google.maps.places.Autocomplete(addressInput.value);
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (place.geometry) {
+          userLocation.value.lat = place.geometry.location.lat();
+          userLocation.value.lng = place.geometry.location.lng();
+          userLocation.value.address = place.formatted_address;
+          fetchDonations();
+        }
+      });
+    }
+  }, 200);
+});
+const filteredDonations = computed(() => donations.value);
+function onMarkerClick(id) {
+  highlightedId.value = id;
+  nextTick(() => {
+    const el = cardRefs[id];
+    if (el && el.scrollIntoView) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
+}
+function goToDetails(id) {
+  router.push(`/food/${id}`);
+}
 </script>
 <style scoped>
-.card { box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 20px; }
-.btn-primary { background-color: #4F46E5; border-color: #4F46E5; }
+.donation-card { transition: box-shadow 0.2s, border 0.2s; border-radius: 8px; }
+.donation-card.highlighted { box-shadow: 0 0 0 3px #4F46E5, 0 8px 24px rgba(0,0,0,0.10); border: 2px solid #4F46E5; }
+.card { margin-bottom: 0.5rem; }
 </style>

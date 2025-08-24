@@ -17,7 +17,7 @@ def create_tables(app, mysql):
         )
         """)
         
-        # Donations table
+        # Donations table with latitude and longitude for geolocation
         cur.execute("""
         CREATE TABLE IF NOT EXISTS donations (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -28,6 +28,9 @@ def create_tables(app, mysql):
             pickup_time TIME NOT NULL,
             special_instructions TEXT,
             donor_id INT NOT NULL,
+            latitude DOUBLE,
+            longitude DOUBLE,
+            food_image_base64 LONGTEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (donor_id) REFERENCES users(id)
         )
