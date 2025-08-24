@@ -29,9 +29,29 @@
               <GoogleMapSingleMarker :lat="Number(food.latitude)" :lng="Number(food.longitude)" :markerTitle="food.food_name" aspect-ratio="16/9" />
             </div>
           </div>
-          <div class="d-flex justify-content-end">
-            <router-link to="/request" class="btn btn-outline-primary">Back to List</router-link>
+          <div class="d-flex justify-content-between">
+            <router-link to="/request" class="btn btn-outline-secondary">
+              <i class="bi bi-arrow-left me-1"></i> Back to List
+            </router-link>
+            <button 
+              @click="showRequestModal" 
+              class="btn btn-primary"
+              :disabled="!isAuthenticated"
+            >
+              <i class="bi bi-bag-plus me-1"></i> Request Food
+            </button>
           </div>
+          
+          <!-- Request Food Modal -->
+          <RequestFoodModal 
+            v-if="food"
+            ref="requestModal"
+            :food-id="food.id"
+            :max-servings="parseInt(food.quantity)"
+            :pickup-address="food.pickup_address"
+            :initial-location="userLocation"
+            @request-submitted="onRequestSubmitted"
+          />
         </div>
       </div>
     </div>
@@ -39,32 +59,121 @@
   </div>
 </template>
 <script setup>
-import { ref, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref, onMounted, computed } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useStore } from 'vuex';
 import api from '../api';
 import GoogleMapSingleMarker from '../components/GoogleMapSingleMarker.vue';
+import RequestFoodModal from '../components/RequestFoodModal.vue';
+
 const route = useRoute();
+const router = useRouter();
+const store = useStore();
 const food = ref(null);
 const loading = ref(true);
-function formatDate(dateStr) {
+const requestModal = ref(null);
+const userLocation = ref({ lat: null, lng: null, address: '' });
+
+const isAuthenticated = computed(() => store.getters.isAuthenticated);
+
+const formatDate = (dateStr) => {
   if (!dateStr) return '';
   const d = new Date(dateStr);
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
-function formatDateTime(dateStr) {
+  return d.toLocaleDateString(undefined, { 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric' 
+  });
+};
+
+const formatDateTime = (dateStr) => {
   if (!dateStr) return '';
   const d = new Date(dateStr);
-  return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-}
+  return d.toLocaleString(undefined, { 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric', 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  });
+};
+
+// Get user's current location if available
+const getCurrentLocation = () => {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        userLocation.value.lat = position.coords.latitude;
+        userLocation.value.lng = position.coords.longitude;
+        // Try to get the address using reverse geocoding
+        if (window.google?.maps) {
+          const geocoder = new window.google.maps.Geocoder();
+          geocoder.geocode(
+            { 
+              location: { 
+                lat: userLocation.value.lat, 
+                lng: userLocation.value.lng 
+              } 
+            },
+            (results, status) => {
+              if (status === 'OK' && results[0]) {
+                userLocation.value.address = results[0].formatted_address;
+              }
+            }
+          );
+        }
+      },
+      (error) => {
+        console.error('Error getting location:', error);
+      }
+    );
+  }
+};
+
+// Show the request modal
+const showRequestModal = () => {
+  if (!isAuthenticated.value) {
+    router.push('/login?redirect=' + encodeURIComponent(route.fullPath));
+    return;
+  }
+  
+  if (requestModal.value) {
+    requestModal.value.show();
+  }
+};
+
+// Handle successful request submission
+const onRequestSubmitted = () => {
+  console.log('Request submitted successfully');
+};
+
 onMounted(async () => {
   loading.value = true;
   try {
     const res = await api.get(`/food/${route.params.id}`);
     food.value = res.data;
+    
+    // Get user's current location
+    getCurrentLocation();
+    
+    // If there's a stored location from the request view, use that
+    const storedLocation = localStorage.getItem('lastSearchedLocation');
+    if (storedLocation) {
+      try {
+        const location = JSON.parse(storedLocation);
+        if (location.lat && location.lng) {
+          userLocation.value = { ...location };
+        }
+      } catch (e) {
+        console.error('Error parsing stored location:', e);
+      }
+    }
   } catch (e) {
+    console.error('Error fetching food details:', e);
     food.value = null;
+  } finally {
+    loading.value = false;
   }
-  loading.value = false;
 });
 </script>
 <style scoped>

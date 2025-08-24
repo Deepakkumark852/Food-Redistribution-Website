@@ -1,5 +1,6 @@
 <template>
   <div class="container">
+    <VerificationPanel />
     <div class="row">
       <div class="col-md-4 mb-3 mb-md-0">
         <HistorySidebar />
@@ -63,6 +64,7 @@ import api from '../api';
 import HistorySidebar from '../components/HistorySidebar.vue';
 import GoogleMapPicker from '../components/GoogleMapPicker.vue';
 import FoodImageUploader from '../components/FoodImageUploader.vue';
+import VerificationPanel from '../components/VerificationPanel.vue';
 
 const food_name = ref('');
 const quantity = ref(1);

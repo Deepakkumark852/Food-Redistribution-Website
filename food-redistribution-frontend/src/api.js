@@ -13,13 +13,52 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   let token = store.state.token;
   if (!token) {
-    const user = JSON.parse(localStorage.getItem('user'));
-    token = user?.token;
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      token = user?.token;
+    } catch (e) {
+      console.warn('Failed to parse user from localStorage:', e);
+    }
   }
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+    console.log('API request with token:', token.substring(0, 20) + '...');
+  } else {
+    console.warn('No token found for API request to:', config.url);
   }
   return config;
 });
+
+// Add a response interceptor to handle token errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      const errorData = error.response.data;
+      // Check if it's an outdated token format error
+      if (errorData?.logout_required || errorData?.error?.includes('Token format outdated')) {
+        console.log('Outdated token detected, logging out user');
+        // Clear stored authentication data
+        store.dispatch('logout');
+        localStorage.removeItem('user');
+        localStorage.removeItem('token');
+        // Redirect to login page
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Food Requests
+export const submitFoodRequest = async (requestData) => {
+  try {
+    const response = await api.post('/requests', requestData);
+    return response.data;
+  } catch (error) {
+    console.error('Error submitting food request:', error);
+    throw error.response?.data || { error: 'Failed to submit request' };
+  }
+};
 
 export default api;

@@ -49,11 +49,20 @@ const login = async () => {
   error.value = '';
   try {
     const res = await api.post('/login', { username: username.value, password: password.value });
-    store.commit('setUser', {
+    
+    // Store user data in both Vuex store and localStorage for consistency
+    const userData = {
       token: res.data.access_token,
       roles: res.data.roles,
       username: username.value,
-    });
+    };
+    
+    store.commit('setUser', userData);
+    
+    // Also store in localStorage with 'user' key for API interceptor
+    localStorage.setItem('user', JSON.stringify(userData));
+    
+    console.log('Login successful, token stored:', userData.token ? 'Yes' : 'No');
     router.push('/home');
   } catch (e) {
     error.value = e.response?.data?.error || 'Login failed';
