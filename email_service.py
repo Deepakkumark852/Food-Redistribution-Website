@@ -170,10 +170,9 @@ class EmailService:
         
         return self.send_email(user_email, subject, html_content)
     
-    def send_verification_notification(self, user_email, username, verification_type, food_name, volunteer_name):
-        """Send verification notification email"""
-        action = "pickup" if verification_type == "pickup" else "delivery"
-        subject = f"Verification Required - {food_name} {action.title()}"
+    def send_verification_email(self, recipient_email, recipient_name, volunteer_name, food_name, verification_type, verification_link):
+        """Send a verification email for pickup or delivery."""
+        subject = f"Action Required: Confirm Food {verification_type.title()}"
         
         html_content = f"""
         <!DOCTYPE html>
@@ -187,28 +186,21 @@ class EmailService:
                 .info-box {{ background-color: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107; }}
                 .footer {{ text-align: center; margin-top: 30px; color: #666; font-size: 12px; }}
                 .btn {{ display: inline-block; padding: 12px 24px; background-color: #ffc107; color: #212529; text-decoration: none; border-radius: 5px; margin: 10px 0; font-weight: bold; }}
-                .urgent {{ color: #dc3545; font-weight: bold; }}
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>⚠️ Verification Required</h1>
+                    <h1>Action Required: Confirm {verification_type.title()}</h1>
                 </div>
                 <div class="content">
-                    <p>Hello <strong>{username}</strong>,</p>
-                    <p class="urgent">Action Required: Please verify a {action} for your food donation.</p>
+                    <p>Hello <strong>{recipient_name}</strong>,</p>
+                    <p>Volunteer <strong>{volunteer_name}</strong> has initiated the <strong>{verification_type}</strong> for the food item: <strong>{food_name}</strong>.</p>
+                    <p>Please click the button below to verify that this action has been completed. This link is valid for 24 hours.</p>
                     
-                    <div class="info-box">
-                        <strong>Verification Details:</strong><br>
-                        🍽️ Food Item: {food_name}<br>
-                        👤 Volunteer: {volunteer_name}<br>
-                        📋 Action: Confirm {action} completion
-                    </div>
+                    <a href="{verification_link}" class="btn">Confirm {verification_type.title()}</a>
                     
-                    <p>A volunteer has {'picked up' if verification_type == 'pickup' else 'delivered'} your food donation. Please log in to verify this {action}.</p>
-                    
-                    <a href="{self.frontend_url}/donate" class="btn">Verify {action.title()}</a>
+                    <p>If you did not request this or do not recognize this activity, please ignore this email. Do not click the link if you are not the intended recipient.</p>
                 </div>
                 <div class="footer">
                     <p>This is an automated message from {self.app_name}</p>
@@ -219,59 +211,31 @@ class EmailService:
         """
         
         text_content = f"""
-        Verification Required - {self.app_name}
+        Action Required: Confirm Food {verification_type.title()}
         
-        Hello {username},
+        Hello {recipient_name},
         
-        Action Required: Please verify a {action} for your food donation.
+        Volunteer {volunteer_name} has initiated the {verification_type} for the food item: {food_name}.
         
-        Details:
-        Food Item: {food_name}
-        Volunteer: {volunteer_name}
-        Action: Confirm {action} completion
+        Please visit the following link to verify this action:
+        {verification_link}
         
-        Please log in to verify this {action}.
-        Visit: {self.frontend_url}/donate
+        If you did not request this, please ignore this email.
+        
+        Thank you,
+        The {self.app_name} Team
         """
         
-        return self.send_email(user_email, subject, html_content, text_content)
-    
-    def send_verification_request_email(self, to_email, verifier_name, volunteer_name, food_name, verification_type, verification_link):
-        subject = f"Verification Required: {food_name} {verification_type.capitalize()}"
-        
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; }}
-                .container {{ padding: 20px; }}
-                .button {{ background-color: #4CAF50; color: white; padding: 14px 20px; margin: 8px 0; border: none; cursor: pointer; width: 100%; text-align: center; text-decoration: none; display: inline-block; font-size: 16px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h2>Verification Required</h2>
-                <p>Hello {verifier_name},</p>
-                <p>{volunteer_name} is requesting confirmation for the <strong>{verification_type}</strong> of <strong>{food_name}</strong>.</p>
-                <p>Please click the button below to confirm that this action has been completed.</p>
-                <a href="{verification_link}" class="button">Confirm {verification_type.capitalize()}</a>
-                <p>If you did not expect this, please ignore this email.</p>
-                <p>Thank you,<br>The {Config.APP_NAME} Team</p>
-            </div>
-        </body>
-        </html>
-        """
-        self.send_email(to_email, subject, html_content)
+        return self.send_email(recipient_email, subject, html_content, text_content)
 
 # Create global email service instance
 email_service = EmailService()
 
-def send_verification_email(to_email, recipient_name, volunteer_name, food_name, verification_type, verification_link):
+def send_verification_email(recipient_email, recipient_name, volunteer_name, food_name, verification_type, verification_link):
     """A wrapper function to send verification email using the global email_service instance."""
-    return email_service.send_verification_request_email(
-        to_email=to_email,
-        verifier_name=recipient_name,
+    return email_service.send_verification_email(
+        recipient_email=recipient_email,
+        recipient_name=recipient_name,
         volunteer_name=volunteer_name,
         food_name=food_name,
         verification_type=verification_type,

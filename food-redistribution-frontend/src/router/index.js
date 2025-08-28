@@ -8,7 +8,7 @@ import VolunteerAssignmentView from '../views/VolunteerAssignmentView.vue';
 import HistoryView from '../views/HistoryView.vue';
 import HomeView from '../views/HomeView.vue';
 import FoodDetailView from '../views/FoodDetailView.vue';
-import VerificationView from '../views/VerificationView.vue'; // Import the new view
+import VerificationView from '../views/VerificationView.vue';
 import api from '../api';
 import store from '../store';
 
@@ -23,8 +23,8 @@ const routes = [
   { path: '/volunteer/assignment/:id', component: VolunteerAssignmentView, meta: { roles: ['volunteer', 'admin'] } },
   { path: '/history', name: 'History', component: HistoryView, meta: { roles: ['donor', 'requester', 'volunteer', 'admin'] } },
   { path: '/food/:id', component: FoodDetailView, meta: { roles: ['donor', 'requester', 'volunteer', 'admin'] } },
-  { path: '/home', name: 'Home', component: HomeView },
-  { path: '/verify', name: 'Verify', component: VerificationView }, // Add the new route
+  { path: '/home', name: 'Home', component: HomeView, meta: { requiresAuth: true } },
+  { path: '/verify', name: 'Verify', component: VerificationView }, // Publicly accessible for email links
 ];
 
 const router = createRouter({
@@ -34,11 +34,11 @@ const router = createRouter({
 
 // Navigation guard for RBAC and session expiry
 router.beforeEach((to, from, next) => {
-  const allowedRoles = to.meta.roles;
-  if (!allowedRoles) return next(); // Public route
+  const { roles, requiresAuth } = to.meta;
+  const isAuthenticated = store.getters.isAuthenticated;
 
   // Restore user from localStorage if store is empty (e.g., on reload)
-  if (!store.getters.isAuthenticated && localStorage.getItem('user')) {
+  if (!isAuthenticated && localStorage.getItem('user')) {
     try {
       const user = JSON.parse(localStorage.getItem('user'));
       if (user && user.token && user.roles && user.username) {
@@ -49,15 +49,28 @@ router.beforeEach((to, from, next) => {
 
   const userRoles = store.getters.roles;
   const token = store.getters.token;
-  if (!token) {
-    // No token, force login
+
+  // If route requires auth and user is not logged in, redirect to login
+  if (requiresAuth && !token) {
     return next('/login');
   }
-  if (allowedRoles.some(r => userRoles.includes(r))) {
-    return next();
-  } else {
-    return next('/login');
+
+  // If route has role restrictions
+  if (roles) {
+    if (!token) {
+      // No token, force login
+      return next('/login');
+    }
+    if (roles.some(r => userRoles.includes(r))) {
+      return next(); // User has required role
+    } else {
+      // User does not have the required role, redirect to home or a 'forbidden' page
+      return next('/home'); 
+    }
   }
+
+  // For all other routes, allow access
+  return next();
 });
 
 // Axios response interceptor for session expiry

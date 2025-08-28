@@ -6,7 +6,7 @@ from flask_jwt_extended import JWTManager, create_access_token, jwt_required, ge
 from functools import wraps
 import os
 import uuid
-from email_service import send_verification_email
+from email_service import email_service, send_verification_email
 from config import Config
 
 # RBAC decorator
@@ -141,8 +141,20 @@ def init_routes(app, mysql):
                     return jsonify({'error': 'Account is deactivated.'}), 403
 
                 # Update last_login timestamp
-                cur.execute("UPDATE users SET last_login = %s WHERE id = %s", (datetime.utcnow(), user['id']))
+                login_time = datetime.utcnow()
+                cur.execute("UPDATE users SET last_login = %s WHERE id = %s", (login_time, user['id']))
                 mysql.connection.commit()
+
+                # Send login notification email
+                try:
+                    email_service.send_login_notification(
+                        user_email=user['email'],
+                        username=user['username'],
+                        login_time=login_time.strftime("%Y-%m-%d %H:%M:%S UTC"),
+                        ip_address=request.remote_addr
+                    )
+                except Exception as e:
+                    app.logger.error(f"Failed to send login email: {e}")
 
                 user_roles = [r.strip() for r in user['roles'].split(',') if r.strip()]
                 access_token = create_access_token(identity=user['username'], additional_claims={
@@ -152,6 +164,31 @@ def init_routes(app, mysql):
                 return jsonify({'access_token': access_token, 'roles': user_roles}), 200
             else:
                 return jsonify({'error': 'Invalid username or password'}), 401
+        finally:
+            cur.close()
+
+    @app.route('/api/logout', methods=['POST'])
+    @jwt_required()
+    def api_logout():
+        username = get_jwt_identity()
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute("SELECT email FROM users WHERE username = %s", [username])
+            user = cur.fetchone()
+            if user:
+                logout_time = datetime.utcnow()
+                try:
+                    email_service.send_logout_notification(
+                        user_email=user['email'],
+                        username=username,
+                        logout_time=logout_time.strftime("%Y-%m-%d %H:%M:%S UTC")
+                    )
+                except Exception as e:
+                    app.logger.error(f"Failed to send logout email: {e}")
+            return jsonify({"msg": "Logout successful"}), 200
+        except Exception as e:
+            app.logger.error(f"Error in logout: {e}")
+            return jsonify({'error': str(e)}), 500
         finally:
             cur.close()
 
@@ -422,6 +459,204 @@ def init_routes(app, mysql):
         cur.close()
         volunteering = [serialize_row(v) for v in volunteering]
         return jsonify({'volunteering': volunteering})
+
+    # ========== VERIFICATION FLOW API ROUTES ==========
+
+    @app.route('/api/assignments/initiate-pickup/<int:request_id>', methods=['POST'])
+    @role_required('volunteer')
+    def initiate_pickup(request_id):
+        claims = get_jwt()
+        volunteer_id = claims.get('id')
+        cur = mysql.connection.cursor()
+        try:
+            # 1. Validate that the request is assigned to this volunteer
+            cur.execute("SELECT * FROM requests WHERE id = %s AND volunteer_id = %s AND status = 'assigned'", (request_id, volunteer_id))
+            request_item = cur.fetchone()
+            if not request_item:
+                return jsonify({'error': 'This request is not assigned to you or is not in the correct state for pickup.'}), 403
+
+            # 2. Get donor details for email
+            cur.execute("""
+                SELECT u.id, u.email, u.username FROM users u
+                JOIN donations d ON u.id = d.donor_id
+                WHERE d.id = %s
+            """, (request_item['food_id'],))
+            donor = cur.fetchone()
+            if not donor:
+                return jsonify({'error': 'Donor not found for this request.'}), 404
+
+            # 3. Create a verification token
+            token = str(uuid.uuid4())
+            expiry = datetime.utcnow() + timedelta(hours=24)
+            
+            cur.execute("""
+                INSERT INTO verifications (request_id, user_id, token, type, expires_at)
+                VALUES (%s, %s, %s, 'pickup', %s)
+            """, (request_id, donor['id'], token, expiry))
+
+            # 4. Update request status
+            cur.execute("UPDATE requests SET status = 'pickup_pending_verification' WHERE id = %s", (request_id,))
+            
+            mysql.connection.commit()
+
+            # 5. Send verification email to donor
+            try:
+                # Get additional details for the email
+                cur.execute("SELECT username FROM users WHERE id = %s", (volunteer_id,))
+                volunteer = cur.fetchone()
+                cur.execute("SELECT food_name FROM donations WHERE id = %s", (request_item['food_id'],))
+                donation = cur.fetchone()
+
+                verification_link = f"{Config.FRONTEND_URL}/verify?token={token}"
+
+                send_verification_email(
+                    recipient_email=donor['email'],
+                    recipient_name=donor.get('username', 'Donor'),
+                    volunteer_name=volunteer.get('username', 'A volunteer'),
+                    food_name=donation.get('food_name', 'the food item'),
+                    verification_type='pickup',
+                    verification_link=verification_link
+                )
+            except Exception as e:
+                app.logger.error(f"Failed to send pickup verification email: {e}")
+                # Note: We don't roll back the DB transaction, as the flow can continue via the UI panel
+            
+            return jsonify({'msg': 'Pickup verification initiated. The donor has been notified.'})
+
+        except Exception as e:
+            mysql.connection.rollback()
+            app.logger.error(f"Error initiating pickup: {e}")
+            return jsonify({'error': str(e)}), 500
+        finally:
+            cur.close()
+
+    @app.route('/api/assignments/initiate-delivery/<int:request_id>', methods=['POST'])
+    @role_required('volunteer')
+    def initiate_delivery(request_id):
+        claims = get_jwt()
+        volunteer_id = claims.get('id')
+        cur = mysql.connection.cursor()
+        try:
+            # 1. Validate that the request is in 'in_transit' and assigned to this volunteer
+            cur.execute("SELECT * FROM requests WHERE id = %s AND volunteer_id = %s AND status = 'in_transit'", (request_id, volunteer_id))
+            request_item = cur.fetchone()
+            if not request_item:
+                return jsonify({'error': 'This request is not ready for delivery or not assigned to you.'}), 403
+
+            # 2. Get requester details for email
+            cur.execute("SELECT id, email, username FROM users WHERE id = %s", (request_item['requester_id'],))
+            requester = cur.fetchone()
+            if not requester:
+                return jsonify({'error': 'Requester not found.'}), 404
+
+            # 3. Create verification token
+            token = str(uuid.uuid4())
+            expiry = datetime.utcnow() + timedelta(hours=24)
+            
+            cur.execute("""
+                INSERT INTO verifications (request_id, user_id, token, type, expires_at)
+                VALUES (%s, %s, %s, 'delivery', %s)
+            """, (request_id, requester['id'], token, expiry))
+
+            # 4. Update request status
+            cur.execute("UPDATE requests SET status = 'delivery_pending_verification' WHERE id = %s", (request_id,))
+            
+            mysql.connection.commit()
+
+            # 5. Send verification email to requester
+            try:
+                # Get additional details for the email
+                cur.execute("SELECT username FROM users WHERE id = %s", (volunteer_id,))
+                volunteer = cur.fetchone()
+                cur.execute("SELECT food_name FROM donations WHERE id = %s", (request_item['food_id'],))
+                donation = cur.fetchone()
+
+                verification_link = f"{Config.FRONTEND_URL}/verify?token={token}"
+
+                send_verification_email(
+                    recipient_email=requester['email'],
+                    recipient_name=requester.get('username', 'Requester'),
+                    volunteer_name=volunteer.get('username', 'A volunteer'),
+                    food_name=donation.get('food_name', 'the food item'),
+                    verification_type='delivery',
+                    verification_link=verification_link
+                )
+            except Exception as e:
+                app.logger.error(f"Failed to send delivery verification email: {e}")
+
+            return jsonify({'msg': 'Delivery verification initiated. The requester has been notified.'})
+
+        except Exception as e:
+            mysql.connection.rollback()
+            app.logger.error(f"Error initiating delivery: {e}")
+            return jsonify({'error': str(e)}), 500
+        finally:
+            cur.close()
+
+    @app.route('/api/verify', methods=['POST'])
+    def verify_token():
+        data = request.get_json()
+        token = data.get('token')
+        
+        if not token:
+            return jsonify({'error': 'Verification token is required.'}), 400
+
+        cur = mysql.connection.cursor()
+        try:
+            # Find the verification record
+            cur.execute("SELECT * FROM verifications WHERE token = %s AND used_at IS NULL AND expires_at > UTC_TIMESTAMP()", (token,))
+            verification = cur.fetchone()
+
+            if not verification:
+                return jsonify({'error': 'Invalid, expired, or already used token.'}), 404
+
+            request_id = verification['request_id']
+            verification_type = verification['type']
+
+            # Mark token as used
+            cur.execute("UPDATE verifications SET used_at = UTC_TIMESTAMP() WHERE id = %s", (verification['id'],))
+
+            if verification_type == 'pickup':
+                # Update request status to 'in_transit'
+                cur.execute("UPDATE requests SET status = 'in_transit' WHERE id = %s", (request_id,))
+                msg = 'Pickup confirmed successfully!'
+            elif verification_type == 'delivery':
+                # Update request status to 'completed'
+                cur.execute("UPDATE requests SET status = 'completed' WHERE id = %s", (request_id,))
+                msg = 'Delivery confirmed successfully!'
+            else:
+                mysql.connection.rollback()
+                return jsonify({'error': 'Invalid verification type.'}), 400
+            
+            mysql.connection.commit()
+            return jsonify({'msg': msg})
+
+        except Exception as e:
+            mysql.connection.rollback()
+            app.logger.error(f"Error during verification: {e}")
+            return jsonify({'error': 'An internal error occurred.'}), 500
+        finally:
+            cur.close()
+
+    @app.route('/api/verifications/pending', methods=['GET'])
+    @jwt_required()
+    def get_pending_verifications():
+        claims = get_jwt()
+        user_id = claims.get('id')
+        cur = mysql.connection.cursor()
+        try:
+            cur.execute("""
+                SELECT v.id, v.request_id, v.type, v.created_at, v.token, d.food_name
+                FROM verifications v
+                JOIN requests r ON v.request_id = r.id
+                JOIN donations d ON r.food_id = d.id
+                WHERE v.user_id = %s AND v.used_at IS NULL AND v.expires_at > UTC_TIMESTAMP()
+                ORDER BY v.created_at DESC
+            """, (user_id,))
+            verifications = [serialize_row(v) for v in cur.fetchall()]
+            return jsonify({'verifications': verifications})
+        finally:
+            cur.close()
 
     # ========== NOTIFICATIONS API ROUTES ==========
     @app.route('/api/notifications', methods=['GET'])
@@ -696,214 +931,137 @@ def init_routes(app, mysql):
         finally:
             cur.close()
             
-    @app.route('/api/assignment/<int:assignment_id>/initiate-pickup', methods=['POST'])
+    @app.route('/api/volunteer/assign/<int:request_id>', methods=['POST'])
     @role_required('volunteer')
-    def initiate_pickup(assignment_id):
+    def assign_volunteer(request_id):
         claims = get_jwt()
         volunteer_id = claims.get('id')
-        
         cur = mysql.connection.cursor()
         try:
-            # Verify assignment and get donor details
+            # Check if the request is available
+            cur.execute("SELECT * FROM requests WHERE id = %s AND status = 'pending'", [request_id])
+            req = cur.fetchone()
+            if not req:
+                return jsonify({'error': 'Request not available for assignment'}), 404
+
+            # Assign the volunteer and update status
             cur.execute("""
-                SELECT r.status, d.donor_id, u_donor.email as donor_email, u_donor.username as donor_name,
-                       u_volunteer.username as volunteer_name, d.food_name
-                FROM requests r
-                JOIN donations d ON r.food_id = d.id
-                JOIN users u_donor ON d.donor_id = u_donor.id
-                JOIN users u_volunteer ON r.volunteer_id = u_volunteer.id
-                WHERE r.id = %s AND r.volunteer_id = %s
-            """, (assignment_id, volunteer_id))
-            details = cur.fetchone()
+                UPDATE requests 
+                SET volunteer_id = %s, status = 'assigned', assigned_at = UTC_TIMESTAMP()
+                WHERE id = %s
+            """, (volunteer_id, request_id))
 
-            if not details:
-                return jsonify({'error': 'Assignment not found or invalid.'}), 404
-            if details['status'] != 'assigned':
-                return jsonify({'error': f"Cannot initiate pickup. Status is '{details['status']}' not 'assigned'."}), 409
-
-            # Generate a unique token for verification
-            token = str(uuid.uuid4())
-            expires_at = datetime.utcnow() + timedelta(hours=24)
+            # Notify the requester
+            requester_id = req['requester_id']
+            food_id = req['food_id']
+            cur.execute("SELECT food_name FROM donations WHERE id = %s", [food_id])
+            food = cur.fetchone()
+            food_name = food['food_name'] if food else 'the requested item'
             
-            # Create verification entry
-            cur.execute("""
-                INSERT INTO verifications (request_id, user_id, token, type, expires_at)
-                VALUES (%s, %s, %s, 'pickup', %s)
-            """, (assignment_id, details['donor_id'], token, expires_at))
-
-            # Update request status
-            cur.execute("UPDATE requests SET status = 'pickup_pending_verification' WHERE id = %s", (assignment_id,))
-
-            # Send email to donor
-            verification_link = f"{Config.FRONTEND_URL}/verify?token={token}"
-            send_verification_email(
-                to_email=details['donor_email'],
-                recipient_name=details['donor_name'],
-                volunteer_name=details['volunteer_name'],
-                food_name=details['food_name'],
-                verification_type='pickup',
-                verification_link=verification_link
+            notification_message = f"A volunteer has been assigned to your request for {food_name}."
+            cur.execute(
+                "INSERT INTO notifications (user_id, message, link) VALUES (%s, %s, %s)",
+                (requester_id, notification_message, f"/requests/{request_id}")
             )
-            
+
             mysql.connection.commit()
-            return jsonify({'message': 'Pickup verification email sent to donor.'}), 200
+            return jsonify({'msg': 'Successfully assigned to the request!'})
         except Exception as e:
             mysql.connection.rollback()
             return jsonify({'error': str(e)}), 500
         finally:
             cur.close()
 
-    @app.route('/api/assignment/<int:assignment_id>/initiate-delivery', methods=['POST'])
-    @role_required('volunteer')
-    def initiate_delivery(assignment_id):
-        claims = get_jwt()
-        volunteer_id = claims.get('id')
-        
+    @app.route('/api/admin/users', methods=['GET'])
+    @role_required('admin')
+    def api_admin_users():
         cur = mysql.connection.cursor()
-        try:
-            # Verify assignment and get requester details
+        cur.execute("SELECT id, username, email, mobile, roles, is_active, created_at, last_login FROM users")
+        users = cur.fetchall()
+        cur.close()
+        # Serialize roles
+        for user in users:
+            user['roles'] = [r.strip() for r in user['roles'].split(',') if r.strip()]
+        return jsonify({'users': users})
+
+    @app.route('/api/admin/user/<int:user_id>', methods=['GET', 'POST', 'DELETE'])
+    @role_required('admin')
+    def api_admin_user(user_id):
+        cur = mysql.connection.cursor()
+        if request.method == 'GET':
+            cur.execute("SELECT id, username, email, mobile, roles, is_active, created_at, last_login FROM users WHERE id = %s", [user_id])
+            user = cur.fetchone()
+            cur.close()
+            if user:
+                user['roles'] = [r.strip() for r in user['roles'].split(',') if r.strip()]
+                return jsonify(user)
+            return jsonify({'error': 'User not found'}), 404
+
+        elif request.method == 'POST':
+            data = request.get_json()
+            username = data.get('username')
+            email = data.get('email')
+            mobile = data.get('mobile')
+            roles = data.get('roles')
+            is_active = data.get('is_active')
             cur.execute("""
-                SELECT r.status, r.requester_id, u_requester.email as requester_email, u_requester.username as requester_name,
-                       u_volunteer.username as volunteer_name, d.food_name
-                FROM requests r
-                JOIN donations d ON r.food_id = d.id
-                JOIN users u_requester ON r.requester_id = u_requester.id
-                JOIN users u_volunteer ON r.volunteer_id = u_volunteer.id
-                WHERE r.id = %s AND r.volunteer_id = %s
-            """, (assignment_id, volunteer_id))
-            details = cur.fetchone()
-
-            if not details:
-                return jsonify({'error': 'Assignment not found or invalid.'}), 404
-            if details['status'] != 'in_transit':
-                return jsonify({'error': f"Cannot initiate delivery. Status is '{details['status']}' not 'in_transit'."}), 409
-
-            # Generate a unique token for verification
-            token = str(uuid.uuid4())
-            expires_at = datetime.utcnow() + timedelta(hours=24)
-            
-            # Create verification entry
-            cur.execute("""
-                INSERT INTO verifications (request_id, user_id, token, type, expires_at)
-                VALUES (%s, %s, %s, 'delivery', %s)
-            """, (assignment_id, details['requester_id'], token, expires_at))
-
-            # Update request status
-            cur.execute("UPDATE requests SET status = 'delivery_pending_verification' WHERE id = %s", (assignment_id,))
-
-            # Send email to requester
-            verification_link = f"{Config.FRONTEND_URL}/verify?token={token}"
-            send_verification_email(
-                to_email=details['requester_email'],
-                recipient_name=details['requester_name'],
-                volunteer_name=details['volunteer_name'],
-                food_name=details['food_name'],
-                verification_type='delivery',
-                verification_link=verification_link
-            )
-            
+                UPDATE users 
+                SET username = %s, email = %s, mobile = %s, roles = %s, is_active = %s, last_login = NULL
+                WHERE id = %s
+            """, (username, email, mobile, ','.join(roles), is_active, user_id))
             mysql.connection.commit()
-            return jsonify({'message': 'Delivery verification email sent to requester.'}), 200
-        except Exception as e:
-            mysql.connection.rollback()
-            return jsonify({'error': str(e)}), 500
-        finally:
             cur.close()
+            return jsonify({'msg': 'User updated successfully'})
 
-    @app.route('/api/verify', methods=['POST'])
-    def verify_action():
-        token = request.json.get('token')
-        if not token:
-            return jsonify({'error': 'Token is required.'}), 400
-
-        cur = mysql.connection.cursor()
-        try:
-            # Find the verification record, lock it
-            cur.execute("SELECT * FROM verifications WHERE token = %s AND is_verified = FALSE AND expires_at > NOW() FOR UPDATE", (token,))
-            verification = cur.fetchone()
-
-            if not verification:
-                return jsonify({'error': 'Invalid, expired, or already used token.'}), 404
-
-            # Update verification status
-            cur.execute("UPDATE verifications SET is_verified = TRUE, verified_at = NOW() WHERE id = %s", (verification['id'],))
-            
-            request_id = verification['request_id']
-            
-            # Update request status based on verification type
-            if verification['type'] == 'pickup':
-                new_status = 'in_transit'
-                cur.execute("UPDATE requests SET status = %s WHERE id = %s", (new_status, request_id))
-                # Notify volunteer
-                cur.execute("SELECT volunteer_id FROM requests WHERE id = %s", (request_id,))
-                volunteer = cur.fetchone()
-                if volunteer:
-                    cur.execute("INSERT INTO notifications (user_id, message, link) VALUES (%s, %s, %s)", 
-                                (volunteer['volunteer_id'], "Pickup confirmed. You can now proceed to delivery.", f"/volunteer/assignment/{request_id}"))
-
-            elif verification['type'] == 'delivery':
-                new_status = 'completed'
-                cur.execute("UPDATE requests SET status = %s, completed_at = NOW() WHERE id = %s", (new_status, request_id))
-                
-                # Add notifications for requester, donor, and volunteer
-                cur.execute("""
-                    SELECT r.requester_id, r.volunteer_id, d.donor_id, d.food_name
-                    FROM requests r JOIN donations d ON r.food_id = d.id
-                    WHERE r.id = %s
-                """, (request_id,))
-                ids = cur.fetchone()
-
-                if ids:
-                    # Requester
-                    cur.execute("INSERT INTO notifications (user_id, message, link) VALUES (%s, %s, %s)", 
-                                (ids['requester_id'], f"Your request for '{ids['food_name']}' is complete. Thank you!", "/history"))
-                    # Donor
-                    cur.execute("INSERT INTO notifications (user_id, message, link) VALUES (%s, %s, %s)", 
-                                (ids['donor_id'], f"Your donation of '{ids['food_name']}' has been successfully delivered.", "/history"))
-                    # Volunteer
-                    cur.execute("INSERT INTO notifications (user_id, message, link) VALUES (%s, %s, %s)", 
-                                (ids['volunteer_id'], f"Delivery of '{ids['food_name']}' is complete. Great job!", "/history"))
-
+        elif request.method == 'DELETE':
+            cur.execute("DELETE FROM users WHERE id = %s", [user_id])
             mysql.connection.commit()
-            return jsonify({'message': f"{verification['type'].capitalize()} verified successfully.", 'status': new_status}), 200
-        except Exception as e:
-            mysql.connection.rollback()
-            return jsonify({'error': str(e)}), 500
-        finally:
             cur.close()
+            return jsonify({'msg': 'User deleted successfully'})
 
-    @app.route('/api/verifications/pending', methods=['GET'])
-    @jwt_required()
-    def get_pending_verifications():
-        claims = get_jwt()
-        user_id = claims.get('id')
+    @app.route('/api/admin/stats', methods=['GET'])
+    @role_required('admin')
+    def api_admin_stats():
         cur = mysql.connection.cursor()
-        try:
-            cur.execute("""
-                SELECT 
-                    v.id, v.token, v.type,
-                    r.id as request_id,
-                    d.food_name,
-                    u.username as volunteer_name
-                FROM verifications v
-                JOIN requests r ON v.request_id = r.id
-                JOIN donations d ON r.food_id = d.id
-                JOIN users u ON r.volunteer_id = u.id
-                WHERE v.user_id = %s AND v.is_verified = FALSE AND v.expires_at > NOW()
-                ORDER BY v.created_at DESC
-            """, (user_id,))
-            verifications = cur.fetchall()
-            return jsonify({'verifications': [serialize_row(v) for v in verifications]})
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
-        finally:
-            cur.close()
+        # Total users
+        cur.execute("SELECT COUNT(*) as total_users FROM users")
+        total_users = cur.fetchone()['total_users']
 
-    # This route is now obsolete as completion is handled by the verification flow.
-    # @app.route('/api/volunteer/assignment/<int:assignment_id>/complete', methods=['POST'])
-    # @role_required('volunteer', 'admin')
-    # def api_volunteer_assignment_complete(assignment_id):
-    # ... (code removed) ...
+        # Total donations
+        cur.execute("SELECT COUNT(*) as total_donations FROM donations")
+        total_donations = cur.fetchone()['total_donations']
 
-    # Register the Blueprints
-    # app.register_blueprint(bp)
+        # Total requests
+        cur.execute("SELECT COUNT(*) as total_requests FROM requests")
+        total_requests = cur.fetchone()['total_requests']
+
+        # Donations by status
+        cur.execute("SELECT status, COUNT(*) as count FROM donations GROUP BY status")
+        donations_status = cur.fetchall()
+
+        # Requests by status
+        cur.execute("SELECT status, COUNT(*) as count FROM requests GROUP BY status")
+        requests_status = cur.fetchall()
+
+        cur.close()
+        return jsonify({
+            'total_users': total_users,
+            'total_donations': total_donations,
+            'total_requests': total_requests,
+            'donations_status': donations_status,
+            'requests_status': requests_status
+        })
+
+    @app.route('/api/admin/notifications', methods=['GET'])
+    @role_required('admin')
+    def api_admin_notifications():
+        cur = mysql.connection.cursor()
+        cur.execute("""
+            SELECT n.*, u.username, u.email 
+            FROM notifications n
+            JOIN users u ON n.user_id = u.id
+            ORDER BY n.created_at DESC
+        """)
+        notifications = cur.fetchall()
+        cur.close()
+        return jsonify({'notifications': notifications})

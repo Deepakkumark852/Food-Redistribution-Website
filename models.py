@@ -73,9 +73,8 @@ def create_tables(app, mysql):
             token VARCHAR(255) UNIQUE NOT NULL,
             type ENUM('pickup', 'delivery') NOT NULL,
             expires_at DATETIME NOT NULL,
-            is_verified BOOLEAN NOT NULL DEFAULT FALSE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            verified_at DATETIME,
+            used_at DATETIME,
             FOREIGN KEY (request_id) REFERENCES requests(id) ON DELETE CASCADE,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
@@ -117,6 +116,23 @@ def create_tables(app, mysql):
         except Exception as e:
             # This will likely fail if the column is already the correct type, which is fine.
             app.logger.warning(f"Could not alter 'requests' table (may already be up-to-date): {e}")
+
+        # Schema Alterations for verifications table
+        try:
+            cur.execute("ALTER TABLE verifications ADD COLUMN used_at DATETIME DEFAULT NULL;")
+            app.logger.info("Altered 'verifications' table to add 'used_at' column.")
+        except Exception as e:
+            app.logger.warning(f"Could not alter 'verifications' table to add 'used_at' (may already exist): {e}")
+        
+        try:
+            cur.execute("ALTER TABLE verifications DROP COLUMN is_verified;")
+        except Exception as e:
+            app.logger.warning(f"Could not alter 'verifications' table to drop 'is_verified' (may not exist): {e}")
+
+        try:
+            cur.execute("ALTER TABLE verifications DROP COLUMN verified_at;")
+        except Exception as e:
+            app.logger.warning(f"Could not alter 'verifications' table to drop 'verified_at' (may not exist): {e}")
 
         mysql.connection.commit()
         cur.close()

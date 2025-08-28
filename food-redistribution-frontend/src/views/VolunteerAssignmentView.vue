@@ -235,7 +235,7 @@ const initiatePickup = async () => {
   isSubmitting.value = true;
   try {
     const assignmentId = assignment.value.id;
-    await api.post(`/assignment/${assignmentId}/initiate-pickup`);
+    await api.post(`/assignments/initiate-pickup/${assignmentId}`);
     alert('A verification email has been sent to the donor. Please wait for them to confirm the pickup.');
     await fetchAssignment(); // Refresh state
   } catch (err) {
@@ -251,7 +251,7 @@ const initiateDelivery = async () => {
   isSubmitting.value = true;
   try {
     const assignmentId = assignment.value.id;
-    await api.post(`/assignment/${assignmentId}/initiate-delivery`);
+    await api.post(`/assignments/initiate-delivery/${assignmentId}`);
     alert('A verification email has been sent to the requester. Please wait for them to confirm the delivery.');
     await fetchAssignment(); // Refresh state
   } catch (err) {
