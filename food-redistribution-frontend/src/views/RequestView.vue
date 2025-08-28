@@ -1,6 +1,5 @@
 <template>
   <div class="container py-3">
-    <VerificationPanel />
     <div class="row mb-2">
       <div class="col-12 d-flex flex-wrap align-items-center gap-2">
         <input v-model="filterFood" @input="fetchDonations" class="form-control w-auto" placeholder="Search food name..." />
@@ -49,16 +48,8 @@ import { ref, onMounted, computed, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../api';
 import GoogleMapMultiMarker from '../components/GoogleMapMultiMarker.vue';
-import VerificationPanel from '../components/VerificationPanel.vue';
 const router = useRouter();
-// Initialize userLocation from localStorage if available
-const loadSavedLocation = () => {
-  const savedLocation = localStorage.getItem('lastSearchedLocation');
-  return savedLocation ? JSON.parse(savedLocation) : { address: '', lat: null, lng: null };
-};
-
-const userLocation = ref(loadSavedLocation());
-const lastSearchedAddress = ref(userLocation.value.address || '');
+const userLocation = ref({ address: '', lat: null, lng: null });
 const donations = ref([]);
 const filterFood = ref('');
 const filterExpiry = ref('');
@@ -77,50 +68,29 @@ const fetchDonations = async () => {
   donations.value = res.data.donations || [];
 };
 onMounted(() => {
+  fetchDonations(); // Initial fetch
   // Try to get current location as default
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(pos => {
       userLocation.value.lat = pos.coords.latitude;
       userLocation.value.lng = pos.coords.longitude;
-      fetchDonations();
-    }, fetchDonations);
-  } else {
-    fetchDonations();
+      fetchDonations(); // Fetch again with location
+    }, (err) => {
+      console.warn(`WARN: ${err.message}`);
+      // fetchDonations(); // Already called initially
+    });
   }
   // Google Maps Places Autocomplete for address search
   const waitForGoogle = setInterval(() => {
-    if (window.google?.maps?.places) {
+    if (window.google && window.google.maps && window.google.maps.places) {
       clearInterval(waitForGoogle);
-      const autocomplete = new window.google.maps.places.Autocomplete(addressInput.value, {
-        fields: ['formatted_address', 'geometry', 'name', 'vicinity']
-      });
-      
-      // Set initial value if we have a saved location
-      if (lastSearchedAddress.value) {
-        addressInput.value.value = lastSearchedAddress.value;
-      }
-      
+      const autocomplete = new window.google.maps.places.Autocomplete(addressInput.value);
       autocomplete.addListener('place_changed', () => {
         const place = autocomplete.getPlace();
         if (place.geometry) {
-          const location = {
-            lat: place.geometry.location.lat(),
-            lng: place.geometry.location.lng(),
-            address: place.formatted_address || `${place.name}, ${place.vicinity || ''}`.trim()
-          };
-          
-          // Update user location and last searched address
-          userLocation.value = { ...location };
-          lastSearchedAddress.value = location.address;
-          
-          // Store in localStorage for use across the application
-          localStorage.setItem('lastSearchedLocation', JSON.stringify(location));
-          
-          // Update the input field with the full formatted address
-          if (place.formatted_address) {
-            addressInput.value.value = place.formatted_address;
-          }
-          
+          userLocation.value.lat = place.geometry.location.lat();
+          userLocation.value.lng = place.geometry.location.lng();
+          userLocation.value.address = place.formatted_address;
           fetchDonations();
         }
       });

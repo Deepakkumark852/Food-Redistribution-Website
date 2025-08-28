@@ -216,6 +216,8 @@ const fetchData = async () => {
     const assigned = await api.get('/volunteer/assignments');
     pendingRequests.value = pending.data.pending_requests || [];
     myAssignments.value = assigned.data.assignments || [];
+    console.log('Fetched pending requests:', pendingRequests.value.length);
+    console.log('Fetched assignments:', myAssignments.value.length);
   } catch (error) {
     console.error('Error fetching volunteer data:', error);
   }

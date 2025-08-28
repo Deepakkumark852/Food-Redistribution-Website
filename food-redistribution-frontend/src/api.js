@@ -61,4 +61,36 @@ export const submitFoodRequest = async (requestData) => {
   }
 };
 
+// Profile
+export const changePassword = async (data) => {
+  try {
+    const response = await api.post('/profile/change_password', data);
+    return response.data;
+  } catch (error) {
+    console.error('Error changing password:', error);
+    throw error.response?.data || { error: 'Failed to change password' };
+  }
+};
+
+// Notifications
+export const getNotifications = async () => {
+  try {
+    const response = await api.get('/notifications');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    throw error.response?.data || { error: 'Failed to fetch notifications' };
+  }
+};
+
+export const markNotificationAsRead = async (notificationId) => {
+  try {
+    const response = await api.post(`/notifications/${notificationId}/read`);
+    return response.data;
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+    throw error.response?.data || { error: 'Failed to mark notification as read' };
+  }
+};
+
 export default api;

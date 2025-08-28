@@ -109,10 +109,10 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { Modal } from 'bootstrap';
-import GoogleMapSingleMarker from './GoogleMapSingleMarker.vue';
 import api from '../api';
+import GoogleMapSingleMarker from './GoogleMapSingleMarker.vue';
 
 const props = defineProps({
   foodId: {
@@ -159,23 +159,38 @@ const isFormValid = computed(() => {
 
 // Initialize Google Places Autocomplete
 const initAutocomplete = () => {
-  if (window.google && window.google.maps && window.google.maps.places) {
+  console.log('Attempting to initialize autocomplete...');
+  console.log('Google available:', !!window.google);
+  console.log('Google Maps available:', !!(window.google && window.google.maps));
+  console.log('Google Places available:', !!(window.google && window.google.maps && window.google.maps.places));
+  console.log('Address input available:', !!addressInput.value);
+  
+  if (window.google && window.google.maps && window.google.maps.places && addressInput.value) {
+    console.log('Creating autocomplete instance...');
     autocomplete = new window.google.maps.places.Autocomplete(
       addressInput.value,
-      { types: ['address'] }
+      { 
+        types: ['establishment', 'geocode'],
+        componentRestrictions: { country: 'IN' }
+      }
     );
+    
+    console.log('Autocomplete created successfully');
     
     autocomplete.addListener('place_changed', () => {
       const place = autocomplete.getPlace();
+      console.log('Place changed:', place);
       if (place.geometry) {
+        deliveryAddress.value = place.formatted_address || place.name;
         deliveryLocation.value = {
           lat: place.geometry.location.lat(),
           lng: place.geometry.location.lng(),
-          address: place.formatted_address
+          address: place.formatted_address || place.name
         };
       }
     });
   } else {
+    console.log('Prerequisites not met, retrying in 100ms...');
     setTimeout(initAutocomplete, 100);
   }
 };
@@ -295,30 +310,31 @@ const submitRequest = async () => {
 
 // Initialize modal when component is mounted
 onMounted(() => {
+  console.log('RequestFoodModal mounted');
   modal = new Modal(document.getElementById(`requestModal${props.foodId}`));
   setInitialLocation();
-  
-  // Initialize autocomplete after a short delay to ensure DOM is ready
-  setTimeout(() => {
-    // Set initial location first
-    setInitialLocation();
-    
-    // Then initialize autocomplete
-    if (addressInput.value) {
-      initAutocomplete();
-      
-      // Set the input value after autocomplete is initialized
-      if (deliveryAddress.value) {
-        addressInput.value.value = deliveryAddress.value;
-      }
-    }
-  }, 500);
 });
 
 // Clean up autocomplete when component is unmounted
 onUnmounted(() => {
   if (autocomplete) {
     window.google.maps.event.clearInstanceListeners(autocomplete);
+  }
+});
+
+// Watch for delivery type changes to initialize autocomplete
+watch(deliveryType, (newType) => {
+  if (newType === 'delivery') {
+    // Wait for DOM to update and show the input field
+    nextTick(() => {
+      console.log('Delivery type changed to delivery, initializing autocomplete...');
+      setTimeout(() => {
+        if (addressInput.value) {
+          console.log('Address input now available, initializing...');
+          initAutocomplete();
+        }
+      }, 100);
+    });
   }
 });
 
@@ -354,5 +370,61 @@ defineExpose({
   background-color: #f8f9fa;
   border-bottom-left-radius: 12px;
   border-bottom-right-radius: 12px;
+}
+</style>
+
+<style>
+/* Global styles for Google Places Autocomplete dropdown */
+.pac-container {
+  z-index: 9999 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+  border: 1px solid #dee2e6 !important;
+}
+
+.pac-item {
+  padding: 12px 16px !important;
+  border-bottom: 1px solid #f1f3f4 !important;
+  cursor: pointer !important;
+}
+
+.pac-item:hover {
+  background-color: #f8f9fa !important;
+}
+
+.pac-item-selected {
+  background-color: #e3f2fd !important;
+}
+
+.pac-matched {
+  font-weight: 600 !important;
+  color: #1976d2 !important;
+}
+
+.pac-item-query {
+  font-size: 14px !important;
+  color: #333 !important;
+}
+
+.pac-secondary {
+  font-size: 12px !important;
+  color: #666 !important;
+}
+
+/* Ensure modal doesn't interfere with autocomplete */
+.modal {
+  overflow: visible !important;
+}
+
+.modal-dialog {
+  overflow: visible !important;
+}
+
+.modal-content {
+  overflow: visible !important;
+}
+
+.modal-body {
+  overflow: visible !important;
 }
 </style>

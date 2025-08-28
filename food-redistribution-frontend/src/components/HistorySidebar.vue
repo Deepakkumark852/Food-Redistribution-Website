@@ -32,7 +32,7 @@ else if (roles.includes('requester')) endpoint = '/history/requests';
 else if (roles.includes('volunteer')) endpoint = '/history/volunteering';
 
 function itemLabel(item) {
-  if (roles.includes('donor')) return `${item.food_name} (${item.quantity})`;
+  if (roles.includes('donor')) return `${item.food_name} (${item.original_quantity})`;
   if (roles.includes('requester')) return `${item.food_name} requested (${item.quantity})`;
   if (roles.includes('volunteer')) return `${item.food_name} assigned (${item.status})`;
   return '';

@@ -42,6 +42,31 @@
                 <i class="fas fa-sign-out-alt"></i> Logout
               </button>
             </li>
+            <li class="nav-item dropdown" v-if="unreadCount > 0">
+              <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-bell"></i>
+                <span class="badge rounded-pill bg-danger">{{ unreadCount }}</span>
+              </a>
+              <ul class="dropdown-menu dropdown-menu-end">
+                <li v-for="notification in notifications" :key="notification.id" class="dropdown-item" :class="{ 'text-muted': notification.is_read }" @click="markAsRead(notification)">
+                  <small>
+                    <template v-if="!notification.is_read">
+                      <strong>{{ notification.title }}</strong>
+                      <div>{{ notification.message }}</div>
+                    </template>
+                    <template v-else>
+                      {{ notification.message }}
+                    </template>
+                  </small>
+                </li>
+                <li>
+                  <hr class="dropdown-divider">
+                </li>
+                <li>
+                  <a class="dropdown-item text-center" href="#" @click="markAllAsRead">Mark all as read</a>
+                </li>
+              </ul>
+            </li>
           </template>
           <template v-else>
             <li class="nav-item">
@@ -56,20 +81,57 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { useStore } from 'vuex';
 import { useRouter } from 'vue-router';
 import ProfileModal from './ProfileModal.vue';
+import api from '../api';
 
 const store = useStore();
 const router = useRouter();
 const roles = computed(() => store.state.roles || []);
 const username = computed(() => store.state.username);
+const role = computed(() => roles.value.length > 0 ? roles.value.join(', ') : '');
 const showProfile = ref(false);
+
+const notifications = ref([]);
+const unreadCount = computed(() => notifications.value.filter(n => !n.is_read).length);
 
 const isDonorOrAdmin = computed(() => roles.value.includes('donor') || roles.value.includes('admin'));
 const isRequesterOrAdmin = computed(() => roles.value.includes('requester') || roles.value.includes('admin'));
 const isVolunteerOrAdmin = computed(() => roles.value.includes('volunteer') || roles.value.includes('admin'));
+
+const fetchNotifications = async () => {
+  if (store.getters.isAuthenticated) {
+    try {
+      const response = await api.getNotifications();
+      notifications.value = response.data.notifications;
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+    }
+  }
+};
+
+const markAsRead = async (notification) => {
+  if (!notification.is_read) {
+    try {
+      await api.markNotificationAsRead(notification.id);
+      notification.is_read = true;
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
+  }
+  // Navigate to the link if it exists
+  if (notification.link) {
+    router.push(notification.link);
+  }
+};
+
+onMounted(() => {
+  fetchNotifications();
+  // Poll for new notifications every 60 seconds
+  setInterval(fetchNotifications, 60000);
+});
 
 const logout = () => {
   store.commit('logout');
@@ -109,5 +171,8 @@ const logout = () => {
 }
 .btn-link:hover {
   color: #FFD700;
+}
+.dropdown-item {
+  cursor: pointer;
 }
 </style>

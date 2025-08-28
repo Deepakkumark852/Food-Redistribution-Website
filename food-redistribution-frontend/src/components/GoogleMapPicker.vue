@@ -18,12 +18,13 @@ const map = ref();
 let marker = null;
 let autocomplete = null;
 
-onMounted(() => {
-  // Wait for Google Maps SDK
-  if (!window.google) return;
+const initializeMap = () => {
+  if (!window.google?.maps) return;
+  
   const center = props.modelValue?.lat && props.modelValue?.lng
     ? { lat: props.modelValue.lat, lng: props.modelValue.lng }
     : { lat: 20.5937, lng: 78.9629 }; // India center
+  
   const gmap = new google.maps.Map(map.value, {
     center,
     zoom: 13,
@@ -31,31 +32,50 @@ onMounted(() => {
     streetViewControl: false,
     fullscreenControl: false
   });
+  
   marker = new google.maps.Marker({
     position: center,
     map: gmap,
     draggable: true
   });
+  
   gmap.addListener('click', e => {
     marker.setPosition(e.latLng);
     emit('update:modelValue', { lat: e.latLng.lat(), lng: e.latLng.lng() });
   });
+  
   marker.addListener('dragend', e => {
     emit('update:modelValue', { lat: e.latLng.lat(), lng: e.latLng.lng() });
   });
-  autocomplete = new google.maps.places.Autocomplete(input.value);
-  autocomplete.addListener('place_changed', () => {
-    const place = autocomplete.getPlace();
-    if (place.geometry) {
-      gmap.setCenter(place.geometry.location);
-      marker.setPosition(place.geometry.location);
-      emit('update:modelValue', {
-        lat: place.geometry.location.lat(),
-        lng: place.geometry.location.lng(),
-        address: place.formatted_address
-      });
+  
+  if (window.google?.maps?.places) {
+    autocomplete = new google.maps.places.Autocomplete(input.value);
+    autocomplete.addListener('place_changed', () => {
+      const place = autocomplete.getPlace();
+      if (place.geometry) {
+        gmap.setCenter(place.geometry.location);
+        marker.setPosition(place.geometry.location);
+        emit('update:modelValue', {
+          lat: place.geometry.location.lat(),
+          lng: place.geometry.location.lng(),
+          address: place.formatted_address
+        });
+      }
+    });
+  }
+};
+
+onMounted(() => {
+  // Wait for Google Maps to load
+  const waitForGoogle = setInterval(() => {
+    if (window.google?.maps?.places) {
+      clearInterval(waitForGoogle);
+      initializeMap();
     }
-  });
+  }, 100);
+  
+  // Timeout after 10 seconds
+  setTimeout(() => clearInterval(waitForGoogle), 10000);
 });
 
 watch(() => props.modelValue, val => {

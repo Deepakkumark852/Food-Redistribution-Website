@@ -132,7 +132,12 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 };
 
 const initMap = () => {
-  if (!window.google || !assignment.value) return;
+  if (!window.google || !assignment.value) {
+    console.log('Google Maps not loaded or assignment not available');
+    return;
+  }
+
+  console.log('Initializing map with assignment:', assignment.value);
 
   map.value = new window.google.maps.Map(document.getElementById('map'), {
     zoom: 13,
@@ -142,33 +147,62 @@ const initMap = () => {
   directionsService.value = new window.google.maps.DirectionsService();
   directionsRenderer.value = new window.google.maps.DirectionsRenderer({
     draggable: false,
-    panel: null
+    panel: null,
+    suppressMarkers: false
   });
   directionsRenderer.value.setMap(map.value);
 
   // Get user's current location and show directions
   if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(position => {
-      userLocation.value = {
-        lat: position.coords.latitude,
-        lng: position.coords.longitude
-      };
-      updateDirections();
-    });
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        userLocation.value = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        };
+        console.log('User location obtained:', userLocation.value);
+        updateDirections();
+      },
+      error => {
+        console.error('Geolocation error:', error);
+        // Use default location if geolocation fails
+        userLocation.value = { lat: 13.0827, lng: 80.2707 };
+        updateDirections();
+      }
+    );
+  } else {
+    // Use default location if geolocation not supported
+    userLocation.value = { lat: 13.0827, lng: 80.2707 };
+    updateDirections();
   }
 };
 
 const updateDirections = () => {
-  if (!directionsService.value || !userLocation.value || !assignment.value) return;
+  if (!directionsService.value || !userLocation.value || !assignment.value) {
+    console.log('Missing required data for directions:', {
+      directionsService: !!directionsService.value,
+      userLocation: !!userLocation.value,
+      assignment: !!assignment.value
+    });
+    return;
+  }
 
   let destination;
+  let destinationAddress;
+  
   if (currentStep.value === 'pickup') {
-    destination = {
-      lat: parseFloat(assignment.value.donor_lat),
-      lng: parseFloat(assignment.value.donor_lng)
-    };
+    // For pickup step, go to donor location
+    if (assignment.value.donor_lat && assignment.value.donor_lng) {
+      destination = {
+        lat: parseFloat(assignment.value.donor_lat),
+        lng: parseFloat(assignment.value.donor_lng)
+      };
+    } else {
+      // Fallback to geocoding the pickup address
+      destinationAddress = assignment.value.pickup_address;
+    }
     
-    if (userLocation.value) {
+    if (destination && userLocation.value) {
       distanceToDonor.value = calculateDistance(
         userLocation.value.lat, userLocation.value.lng,
         destination.lat, destination.lng
@@ -176,14 +210,21 @@ const updateDirections = () => {
       estimatedTime.value = Math.round(distanceToDonor.value * 3); // Rough estimate: 3 min per km
     }
   } else {
-    destination = {
-      lat: parseFloat(assignment.value.delivery_latitude),
-      lng: parseFloat(assignment.value.delivery_longitude)
-    };
+    // For delivery step, go to requester location
+    if (assignment.value.delivery_latitude && assignment.value.delivery_longitude) {
+      destination = {
+        lat: parseFloat(assignment.value.delivery_latitude),
+        lng: parseFloat(assignment.value.delivery_longitude)
+      };
+    } else {
+      // Fallback to geocoding the delivery address
+      destinationAddress = assignment.value.delivery_address;
+    }
     
-    if (assignment.value.donor_lat && assignment.value.donor_lng) {
+    // Calculate distance from current location (or donor location) to requester
+    if (destination && userLocation.value) {
       distanceToRequester.value = calculateDistance(
-        parseFloat(assignment.value.donor_lat), parseFloat(assignment.value.donor_lng),
+        userLocation.value.lat, userLocation.value.lng,
         destination.lat, destination.lng
       );
       deliveryTime.value = Math.round(distanceToRequester.value * 3);
@@ -192,15 +233,73 @@ const updateDirections = () => {
 
   const request = {
     origin: userLocation.value,
-    destination: destination,
+    destination: destination || destinationAddress,
     travelMode: window.google.maps.TravelMode.DRIVING,
   };
 
+  console.log('Requesting directions:', request);
+
   directionsService.value.route(request, (result, status) => {
+    console.log('Directions result:', status, result);
     if (status === 'OK') {
       directionsRenderer.value.setDirections(result);
+      
+      // Update distance and time from actual route
+      const route = result.routes[0];
+      if (route && route.legs[0]) {
+        const leg = route.legs[0];
+        if (currentStep.value === 'pickup') {
+          distanceToDonor.value = leg.distance.value / 1000; // Convert to km
+          estimatedTime.value = Math.round(leg.duration.value / 60); // Convert to minutes
+        } else {
+          distanceToRequester.value = leg.distance.value / 1000;
+          deliveryTime.value = Math.round(leg.duration.value / 60);
+        }
+      }
+    } else {
+      console.error('Directions request failed:', status);
+      // Fallback to showing static markers
+      showStaticMarkers();
     }
   });
+};
+
+const showStaticMarkers = () => {
+  if (!map.value || !assignment.value) return;
+  
+  // Clear existing markers
+  if (directionsRenderer.value) {
+    directionsRenderer.value.setDirections({routes: []});
+  }
+  
+  let targetLocation;
+  if (currentStep.value === 'pickup' && assignment.value.donor_lat && assignment.value.donor_lng) {
+    targetLocation = {
+      lat: parseFloat(assignment.value.donor_lat),
+      lng: parseFloat(assignment.value.donor_lng)
+    };
+  } else if (currentStep.value === 'delivery' && assignment.value.delivery_latitude && assignment.value.delivery_longitude) {
+    targetLocation = {
+      lat: parseFloat(assignment.value.delivery_latitude),
+      lng: parseFloat(assignment.value.delivery_longitude)
+    };
+  }
+  
+  if (targetLocation) {
+    // Add marker for destination
+    new window.google.maps.Marker({
+      position: targetLocation,
+      map: map.value,
+      title: currentStep.value === 'pickup' ? 'Pickup Location' : 'Delivery Location',
+      icon: {
+        url: currentStep.value === 'pickup' ? 'https://maps.google.com/mapfiles/ms/icons/green-dot.png' : 'https://maps.google.com/mapfiles/ms/icons/red-dot.png'
+      }
+    });
+    
+    // Center map on destination
+    map.value.setCenter(targetLocation);
+    map.value.setZoom(15);
+  }
 };
 
 const fetchAssignment = async () => {
@@ -310,9 +409,12 @@ onMounted(() => {
   const waitForGoogle = setInterval(() => {
     if (window.google?.maps) {
       clearInterval(waitForGoogle);
-      if (assignment.value) {
-        initMap();
-      }
+      // Wait a bit more for assignment data to load
+      setTimeout(() => {
+        if (assignment.value) {
+          initMap();
+        }
+      }, 500);
     }
   }, 100);
 });

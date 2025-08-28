@@ -1,6 +1,5 @@
 <template>
   <div class="container">
-    <VerificationPanel />
     <div class="row">
       <div class="col-md-4 mb-3 mb-md-0">
         <HistorySidebar />
@@ -18,9 +17,9 @@
                   <input v-model="food_name" type="text" class="form-control" id="food_name" required />
                 </div>
                 <div class="col-md-6">
-                  <label for="quantity" class="form-label">Quantity</label>
+                  <label for="original_quantity" class="form-label">Quantity</label>
                   <div class="input-group">
-                    <input v-model.number="quantity" type="number" class="form-control" id="quantity" min="1" required />
+                    <input v-model.number="original_quantity" type="number" class="form-control" id="original_quantity" min="1" required />
                     <span class="input-group-text">servings</span>
                   </div>
                 </div>
@@ -31,8 +30,16 @@
                   <input v-model="expiry_date" type="date" class="form-control" id="expiry_date" required />
                 </div>
                 <div class="col-md-6">
-                  <label for="pickup_time" class="form-label">Pickup Time</label>
-                  <input v-model="pickup_time" type="time" class="form-control" id="pickup_time" required />
+                  <div class="mb-3">
+                    <label for="pickup_window_start" class="form-label">Pickup Window Start</label>
+                    <input type="datetime-local" class="form-control" id="pickup_window_start" v-model="pickup_window_start" required>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="mb-3">
+                    <label for="pickup_window_end" class="form-label">Pickup Window End</label>
+                    <input type="datetime-local" class="form-control" id="pickup_window_end" v-model="pickup_window_end" required>
+                  </div>
                 </div>
               </div>
               <div class="mb-3">
@@ -64,12 +71,12 @@ import api from '../api';
 import HistorySidebar from '../components/HistorySidebar.vue';
 import GoogleMapPicker from '../components/GoogleMapPicker.vue';
 import FoodImageUploader from '../components/FoodImageUploader.vue';
-import VerificationPanel from '../components/VerificationPanel.vue';
 
 const food_name = ref('');
-const quantity = ref(1);
+const original_quantity = ref(1);
 const expiry_date = ref('');
-const pickup_time = ref('');
+const pickup_window_start = ref('');
+const pickup_window_end = ref('');
 const special_instructions = ref('');
 const error = ref('');
 const success = ref('');
@@ -82,28 +89,31 @@ const donate = async () => {
   try {
     const payload = {
       food_name: food_name.value,
-      quantity: quantity.value,
+      original_quantity: original_quantity.value,
       expiry_date: expiry_date.value,
       pickup_address: location.value.address,
-      pickup_time: pickup_time.value,
+      pickup_window_start: pickup_window_start.value,
+      pickup_window_end: pickup_window_end.value,
       special_instructions: special_instructions.value,
       latitude: location.value.lat,
-      longitude: location.value.lng
+      longitude: location.value.lng,
     };
     if (food_image_base64.value) {
       payload.food_image_base64 = food_image_base64.value;
     }
     await api.post('/donate', payload);
-    success.value = 'Donation submitted!';
+    success.value = 'Donation submitted successfully!';
+    // Reset form
     food_name.value = '';
-    quantity.value = 1;
+    original_quantity.value = 1;
     expiry_date.value = '';
-    pickup_time.value = '';
+    pickup_window_start.value = '';
+    pickup_window_end.value = '';
     special_instructions.value = '';
     location.value = { address: '', lat: null, lng: null };
     food_image_base64.value = '';
   } catch (e) {
-    error.value = e.response?.data?.error || 'Donation failed';
+    error.value = e.response?.data?.error || 'An error occurred.';
   }
 };
 </script>

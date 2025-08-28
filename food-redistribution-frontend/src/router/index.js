@@ -4,10 +4,11 @@ import RegisterView from '../views/RegisterView.vue';
 import DonateView from '../views/DonateView.vue';
 import RequestView from '../views/RequestView.vue';
 import VolunteerView from '../views/VolunteerView.vue';
-import AssignmentDetailsView from '../views/AssignmentDetailsView.vue';
+import VolunteerAssignmentView from '../views/VolunteerAssignmentView.vue';
 import HistoryView from '../views/HistoryView.vue';
 import HomeView from '../views/HomeView.vue';
 import FoodDetailView from '../views/FoodDetailView.vue';
+import VerificationView from '../views/VerificationView.vue'; // Import the new view
 import api from '../api';
 import store from '../store';
 
@@ -19,10 +20,11 @@ const routes = [
   { path: '/donate', component: DonateView, meta: { roles: ['donor', 'admin'] } },
   { path: '/request', component: RequestView, meta: { roles: ['requester', 'admin'] } },
   { path: '/volunteer', component: VolunteerView, meta: { roles: ['volunteer', 'admin'] } },
-  { path: '/volunteer/assignment/:id', component: AssignmentDetailsView, meta: { roles: ['volunteer', 'admin'] } },
+  { path: '/volunteer/assignment/:id', component: VolunteerAssignmentView, meta: { roles: ['volunteer', 'admin'] } },
   { path: '/history', name: 'History', component: HistoryView, meta: { roles: ['donor', 'requester', 'volunteer', 'admin'] } },
   { path: '/food/:id', component: FoodDetailView, meta: { roles: ['donor', 'requester', 'volunteer', 'admin'] } },
   { path: '/home', name: 'Home', component: HomeView },
+  { path: '/verify', name: 'Verify', component: VerificationView }, // Add the new route
 ];
 
 const router = createRouter({
