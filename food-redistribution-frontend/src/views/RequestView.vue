@@ -40,38 +40,43 @@
           <div v-if="donations.length === 0" class="alert alert-info text-center">
             No donations found matching your criteria. Try expanding your search!
           </div>
-          <div v-else class="row g-4 row-cols-1 row-cols-md-2 row-cols-xl-3">
-            <div v-for="donation in filteredDonations" :key="donation.id" class="col">
-              <div
+          <div v-else>
+            <div v-for="donation in filteredDonations" :key="donation.id" 
                 :ref="el => cardRefs[donation.id] = el"
-                class="donation-card card h-100 d-flex flex-column"
+                class="card donation-card-horizontal mb-3"
                 :class="{ 'highlighted': highlightedId === donation.id }"
                 @mouseenter="highlightedId = donation.id"
-                @mouseleave="highlightedId = null"
-              >
-                <img v-if="donation.food_image_url" :src="donation.food_image_url" class="card-img-top" alt="Food image" @click="goToDetails(donation.id)" style="cursor: pointer;">
-                <div v-else class="card-img-top no-image d-flex align-items-center justify-content-center bg-light" @click="goToDetails(donation.id)" style="cursor: pointer;">
-                  <i class="fas fa-utensils fa-3x text-muted"></i>
+                @mouseleave="highlightedId = null">
+                <div class="row g-0">
+                    <div class="col-md-4 col-lg-3">
+                        <div @click="goToDetails(donation.id)" style="cursor: pointer; height: 100%;">
+                            <img v-if="donation.food_image_url" :src="donation.food_image_url" class="img-fluid rounded-start" alt="Food image">
+                            <div v-else class="no-image d-flex align-items-center justify-content-center bg-light rounded-start">
+                                <i class="fas fa-utensils fa-3x text-muted"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-8 col-lg-9">
+                        <div class="card-body d-flex flex-column h-100">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <h5 class="card-title mb-1">{{ donation.food_name }}</h5>
+                                <span class="badge flex-shrink-0 ms-2" :class="getDonationStatusClass(donation.status)">{{ formatStatus(donation.status) }}</span>
+                            </div>
+                            <p class="card-text text-muted small mb-2">Expires: {{ formatDate(donation.expiry_date) }}</p>
+                            
+                            <p class="card-text mb-1">
+                                <i class="fas fa-box fa-fw me-2 text-primary"></i>{{ donation.remaining_quantity }} servings
+                            </p>
+                            <p v-if="donation.distance" class="card-text mb-3">
+                                <i class="fas fa-road fa-fw me-2 text-primary"></i>{{ donation.distance.toFixed(2) }} km away
+                            </p>
+
+                            <div class="mt-auto">
+                                <button @click="goToDetails(donation.id)" class="btn btn-primary w-100">View Details</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="card-body d-flex flex-column flex-grow-1">
-                  <h5 class="card-title">{{ donation.food_name }}</h5>
-                  <p class="card-text mb-1">
-                    <i class="fas fa-box me-2"></i><strong>Quantity:</strong> {{ donation.remaining_quantity }} servings
-                  </p>
-                  <p class="card-text mb-1">
-                    <i class="fas fa-calendar-times me-2"></i><strong>Expires:</strong> {{ formatDate(donation.expiry_date) }}
-                  </p>
-                  <p v-if="donation.distance" class="card-text mb-2">
-                    <i class="fas fa-road me-2"></i><strong>Distance:</strong> {{ donation.distance.toFixed(2) }} km away
-                  </p>
-                  <div class="mt-auto pt-2">
-                    <span class="badge" :class="getDonationStatusClass(donation.status)">{{ formatStatus(donation.status) }}</span>
-                  </div>
-                </div>
-                <div class="card-footer bg-transparent border-0 pt-0">
-                   <button @click="goToDetails(donation.id)" class="btn btn-primary w-100">View Details</button>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -191,27 +196,25 @@ function formatStatus(status) {
 }
 </script>
 <style scoped>
-.donation-card {
+.donation-card-horizontal {
   transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
   border-radius: 12px;
   overflow: hidden;
 }
-.donation-card:hover {
+.donation-card-horizontal:hover {
   transform: translateY(-5px);
   box-shadow: 0 8px 20px rgba(0,0,0,0.12);
 }
-.donation-card.highlighted {
+.donation-card-horizontal.highlighted {
   box-shadow: 0 0 0 3px var(--primary-color, #4F46E5), 0 8px 24px rgba(0,0,0,0.15);
   border: 1px solid var(--primary-color, #4F46E5);
 }
-.card-img-top {
-  height: 180px;
+.donation-card-horizontal .img-fluid,
+.donation-card-horizontal .no-image {
+  height: 100%;
   object-fit: cover;
 }
-.no-image {
-  height: 180px;
-}
-.card-footer {
-  padding-top: 0;
+.donation-card-horizontal .no-image {
+  min-height: 170px; /* Ensure a minimum height for cards without images */
 }
 </style>
