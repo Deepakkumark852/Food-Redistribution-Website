@@ -1,176 +1,133 @@
 <template>
-  <div class="container py-4">
+  <div class="assignment-view-container container-fluid py-4 px-lg-5">
     <div v-if="loading" class="text-center py-5">
       <div class="spinner-border text-primary" role="status">
         <span class="visually-hidden">Loading...</span>
       </div>
       <p class="mt-3">Loading assignment details...</p>
     </div>
-    
     <div v-else-if="error" class="alert alert-danger" role="alert">
       {{ error }}
     </div>
-    
-    <div v-else-if="assignment" class="assignment-details">
-      <!-- Assignment Header -->
-      <div class="card mb-4 shadow-sm">
-        <div class="card-body p-4">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="mb-0">
-              <i class="fas fa-truck-loading me-2"></i>
-              Delivery Assignment
-            </h2>
-            <span :class="statusBadgeClass" class="badge fs-5">{{ formattedStatus }}</span>
-          </div>
-          
-          <div class="row">
-            <div class="col-md-8">
-              <h4 class="mb-2">{{ assignment.food_name }}</h4>
-              <div class="mb-1"><b>Quantity:</b> {{ assignment.quantity }} of {{ assignment.original_quantity }}</div>
-              <div class="mb-1"><b>Assigned at:</b> {{ formatDate(assignment.assigned_at) }}</div>
-              <div v-if="assignment.special_instructions" class="mb-3 p-2 bg-light rounded">
-                <b>Special Instructions:</b> {{ assignment.special_instructions }}
-              </div>
-            </div>
-            <div class="col-md-4 text-md-end mt-3 mt-md-0">
-              <!-- Action Buttons based on status -->
-              <button v-if="assignment.status === 'assigned'" 
-                      class="btn btn-primary btn-lg"
-                      @click="initiatePickup"
-                      :disabled="isSubmitting">
-                <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                <i v-else class="fas fa-box-open me-2"></i>
-                Initiate Pickup
-              </button>
-              <button v-if="assignment.status === 'in_transit'" 
-                      class="btn btn-success btn-lg"
-                      @click="initiateDelivery"
-                      :disabled="isSubmitting">
-                <span v-if="isSubmitting" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                <i v-else class="fas fa-flag-checkered me-2"></i>
-                Initiate Delivery
-              </button>
-              <div v-if="['pickup_pending_verification', 'delivery_pending_verification'].includes(assignment.status)" class="text-muted">
-                <i class="fas fa-hourglass-half me-1"></i>
-                Awaiting Confirmation...
-              </div>
-              <div v-if="assignment.status === 'completed'" class="text-success">
-                <i class="fas fa-check-circle me-1"></i>
-                Assignment Completed
-              </div>
-            </div>
-          </div>
+    <div v-else-if="assignment" class="animate__animated animate__fadeIn">
+      <!-- Page Header -->
+      <div class="page-header d-flex justify-content-between align-items-center mb-4">
+        <div>
+          <h1 class="fw-bold mb-1">Assignment Details</h1>
+          <p class="text-muted mb-0">Manage your pickup and delivery.</p>
         </div>
-      </div>
-      
-      <!-- Delivery Route Map -->
-      <div class="card mb-4 shadow-sm">
-        <div class="card-body p-4">
-          <h3 class="mb-3">Delivery Route</h3>
-          <div id="route-map" style="height: 400px; border-radius: 12px;" ref="routeMap"></div>
-        </div>
-      </div>
-      
-      <!-- Pickup & Delivery Info -->
-      <div class="row g-4 mb-4">
-        <!-- Pickup Information -->
-        <div class="col-md-6">
-          <div class="card h-100 shadow-sm" style="border-left: 4px solid #0d6efd;">
-            <div class="card-body p-4">
-              <h3 class="mb-3"><i class="fas fa-box me-2"></i>Pickup Information</h3>
-              
-              <h5 class="mb-2">{{ assignment.donor_name }}</h5>
-              <div class="mb-1">
-                <i class="fas fa-map-marker-alt text-primary me-2"></i>
-                {{ assignment.pickup_address }}
-              </div>
-              <div class="mb-1">
-                <i class="fas fa-phone text-primary me-2"></i>
-                {{ assignment.donor_mobile }}
-              </div>
-              <div class="mb-1">
-                <i class="fas fa-envelope text-primary me-2"></i>
-                {{ assignment.donor_email }}
-              </div>
-              
-              <div class="mt-3">
-                <a :href="'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(assignment.pickup_address)" 
-                   class="btn btn-outline-primary" 
-                   target="_blank">
-                  <i class="fas fa-directions me-2"></i>
-                  Get Directions
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Delivery Information -->
-        <div class="col-md-6">
-          <div class="card h-100 shadow-sm" style="border-left: 4px solid #28a745;">
-            <div class="card-body p-4">
-              <h3 class="mb-3"><i class="fas fa-home me-2"></i>Delivery Information</h3>
-              
-              <h5 class="mb-2">{{ assignment.requester_name }}</h5>
-              <div class="mb-1">
-                <i class="fas fa-map-marker-alt text-success me-2"></i>
-                {{ assignment.delivery_address }}
-              </div>
-              <div class="mb-1">
-                <i class="fas fa-phone text-success me-2"></i>
-                {{ assignment.requester_mobile }}
-              </div>
-              <div class="mb-1">
-                <i class="fas fa-envelope text-success me-2"></i>
-                {{ assignment.requester_email }}
-              </div>
-              
-              <div class="mt-3">
-                <a :href="'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(assignment.delivery_address)" 
-                   class="btn btn-outline-success" 
-                   target="_blank">
-                  <i class="fas fa-directions me-2"></i>
-                  Get Directions
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Food Details -->
-      <div class="card mb-4 shadow-sm">
-        <div class="card-body p-4">
-          <h3 class="mb-3">Food Details</h3>
-          
-          <div class="row align-items-center">
-            <div class="col-md-6">
-              <div class="mb-2"><b>Expiry Date:</b> {{ formatDate(assignment.expiry_date) }}</div>
-              <div class="mb-2"><b>Original Quantity:</b> {{ assignment.original_quantity }}</div>
-              <div class="mb-2"><b>Requested Quantity:</b> {{ assignment.quantity }}</div>
-            </div>
-            <div class="col-md-6 text-center">
-              <div v-if="assignment.food_image_base64" class="food-image-container">
-                <img :src="'data:image/jpeg;base64,' + assignment.food_image_base64" 
-                     class="img-fluid rounded" 
-                     alt="Food Image"
-                     style="max-height: 200px;" />
-              </div>
-              <div v-else class="no-image">
-                <i class="fas fa-image fa-3x text-muted mb-2"></i>
-                <p class="text-muted">No image available</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- Back Button -->
-      <div class="text-center mb-4">
         <button class="btn btn-outline-secondary" @click="goBack">
-          <i class="fas fa-arrow-left me-2"></i>
-          Back to Volunteer Dashboard
+          <i class="fas fa-arrow-left me-2"></i>Back to List
         </button>
+      </div>
+
+      <!-- Main Assignment Card -->
+      <div class="card main-assignment-card shadow-lg border-0 mb-4">
+        <div class="card-body p-4">
+          <div class="row align-items-center">
+            <div class="col-lg-8">
+              <h3 class="fw-bold mb-2">{{ assignment.food_name }}</h3>
+              <p class="mb-3">
+                <span class="me-4"><strong>Quantity:</strong> {{ assignment.quantity }}</span>
+                <span><strong>Assigned:</strong> {{ formatDate(assignment.assigned_at) }}</span>
+              </p>
+              <p v-if="assignment.special_instructions" class="special-instructions p-3 rounded">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Instructions:</strong> {{ assignment.special_instructions }}
+              </p>
+            </div>
+            <div class="col-lg-4 text-lg-end mt-3 mt-lg-0">
+              <div class="status-display">
+                <p class="mb-1 text-muted">STATUS</p>
+                <span :class="statusBadgeClass" class="badge fs-5 px-3 py-2 shadow-sm">{{ formattedStatus }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Bar -->
+      <div class="card action-bar shadow-sm mb-4">
+        <div class="card-body d-flex justify-content-center align-items-center p-3">
+          <button v-if="assignment.status === 'assigned'" 
+                  class="btn btn-primary btn-lg"
+                  @click="initiatePickup"
+                  :disabled="isSubmitting">
+            <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            <i v-else class="fas fa-box-open me-2"></i>
+            {{ isSubmitting ? 'Processing...' : 'Confirm Pickup' }}
+          </button>
+          <button v-if="assignment.status === 'in_transit'" 
+                  class="btn btn-success btn-lg"
+                  @click="initiateDelivery"
+                  :disabled="isSubmitting">
+            <span v-if="isSubmitting" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            <i v-else class="fas fa-flag-checkered me-2"></i>
+            {{ isSubmitting ? 'Processing...' : 'Confirm Delivery' }}
+          </button>
+          <div v-if="['pickup_verification_pending', 'delivery_verification_pending'].includes(assignment.status)" class="text-center text-muted">
+            <i class="fas fa-hourglass-half fa-spin me-2"></i>
+            Awaiting confirmation from the other party...
+          </div>
+          <div v-if="assignment.status === 'completed'" class="text-center text-success">
+            <i class="fas fa-check-circle fa-2x me-2"></i>
+            <h5 class="d-inline-block mb-0">Assignment Completed!</h5>
+          </div>
+        </div>
+      </div>
+
+      <!-- Map and Details Row -->
+      <div class="row g-4">
+        <!-- Left Column: Map -->
+        <div class="col-lg-7">
+          <div class="card shadow-sm h-100">
+            <div class="card-header">
+              <h5 class="mb-0 fw-bold"><i class="fas fa-route me-2"></i>Delivery Route</h5>
+            </div>
+            <div class="card-body p-2">
+              <div id="route-map" style="height: 500px; border-radius: 8px;" ref="routeMap"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Pickup & Delivery -->
+        <div class="col-lg-5">
+          <!-- Pickup Card -->
+          <div class="card info-card shadow-sm mb-4">
+            <div class="card-header bg-light">
+              <h5 class="mb-0 fw-bold"><i class="fas fa-box me-2 text-primary"></i>Pickup Details</h5>
+            </div>
+            <div class="card-body">
+              <p class="fs-5 fw-bold mb-1">{{ assignment.donor_name }}</p>
+              <p class="mb-2"><i class="fas fa-map-marker-alt me-2 text-muted"></i>{{ assignment.pickup_address }}</p>
+              <p class="mb-2"><i class="fas fa-phone me-2 text-muted"></i>{{ assignment.donor_mobile }}</p>
+              <p class="mb-3"><i class="fas fa-envelope me-2 text-muted"></i>{{ assignment.donor_email }}</p>
+              <a :href="'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(assignment.pickup_address)" 
+                 class="btn btn-outline-primary w-100" 
+                 target="_blank">
+                <i class="fas fa-directions me-2"></i>Get Directions
+              </a>
+            </div>
+          </div>
+
+          <!-- Delivery Card -->
+          <div class="card info-card shadow-sm">
+            <div class="card-header bg-light">
+              <h5 class="mb-0 fw-bold"><i class="fas fa-home me-2 text-success"></i>Delivery Details</h5>
+            </div>
+            <div class="card-body">
+              <p class="fs-5 fw-bold mb-1">{{ assignment.requester_name }}</p>
+              <p class="mb-2"><i class="fas fa-map-marker-alt me-2 text-muted"></i>{{ assignment.delivery_address }}</p>
+              <p class="mb-2"><i class="fas fa-phone me-2 text-muted"></i>{{ assignment.requester_mobile }}</p>
+              <p class="mb-3"><i class="fas fa-envelope me-2 text-muted"></i>{{ assignment.requester_email }}</p>
+              <a :href="'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(assignment.delivery_address)" 
+                 class="btn btn-outline-success w-100" 
+                 target="_blank">
+                <i class="fas fa-directions me-2"></i>Get Directions
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -363,45 +320,49 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.assignment-details {
-  max-width: 1200px;
-  margin: 0 auto;
-}
+@import url('https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css');
 
-.card {
-  border: none;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.badge {
-  padding: 0.6em 1em;
-  border-radius: 8px;
-}
-
-.food-image-container {
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-
-.no-image {
-  padding: 2rem;
+.assignment-view-container {
   background-color: #f8f9fa;
+}
+
+.main-assignment-card {
+  background: white;
+  border-radius: 16px;
+}
+
+.special-instructions {
+  background-color: #e9ecef;
+  font-style: italic;
+  font-size: 0.95rem;
+}
+
+.status-display .badge {
+  border-radius: 10px;
+}
+
+.action-bar {
   border-radius: 12px;
 }
 
-.btn {
-  border-radius: 8px;
-  padding: 0.5rem 1.25rem;
-  font-weight: 500;
+.info-card {
+  border-radius: 12px;
 }
 
-.btn-lg {
-  padding: 0.75rem 1.5rem;
-  font-weight: 600;
+.info-card .card-header {
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
 }
 
+#route-map {
+  width: 100%;
+  height: 100%;
+  min-height: 500px;
+}
+
+.badge.bg-info {
+  color: #000 !important;
+}
 .badge.bg-warning {
   color: #000 !important;
 }

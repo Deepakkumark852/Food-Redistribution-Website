@@ -1,63 +1,69 @@
 <template>
-  <div class="container">
-    <div class="row">
-      <div class="col-md-4 mb-3 mb-md-0">
+  <div class="container py-5">
+    <div class="row g-5">
+      <div class="col-lg-4 order-lg-2">
+        <h3 class="mb-4">Donation History</h3>
         <HistorySidebar />
       </div>
-      <div class="col-md-8">
-        <div class="card mb-4">
-          <div class="card-header bg-white">
-            <h4 class="my-1"><i class="fas fa-donate me-2"></i> Donate Food</h4>
-          </div>
-          <div class="card-body">
-            <form @submit.prevent="donate">
-              <div class="row mb-3">
+      <div class="col-lg-8 order-lg-1">
+        <div class="card form-card">
+          <div class="card-body p-4 p-md-5">
+            <h2 class="card-title text-center mb-4"><i class="fas fa-gift me-2 text-primary"></i>Create a Donation</h2>
+            <form @submit.prevent="donate" class="needs-validation" novalidate>
+              <div class="row g-3">
                 <div class="col-md-6">
-                  <label for="food_name" class="form-label">Food Item Name</label>
-                  <input v-model="food_name" type="text" class="form-control" id="food_name" required />
-                </div>
-                <div class="col-md-6">
-                  <label for="original_quantity" class="form-label">Quantity</label>
-                  <div class="input-group">
-                    <input v-model.number="original_quantity" type="number" class="form-control" id="original_quantity" min="1" required />
-                    <span class="input-group-text">servings</span>
-                  </div>
-                </div>
-              </div>
-              <div class="row mb-3">
-                <div class="col-md-6">
-                  <label for="expiry_date" class="form-label">Best Before</label>
-                  <input v-model="expiry_date" type="date" class="form-control" id="expiry_date" required />
-                </div>
-                <div class="col-md-6">
-                  <div class="mb-3">
-                    <label for="pickup_window_start" class="form-label">Pickup Window Start</label>
-                    <input type="datetime-local" class="form-control" id="pickup_window_start" v-model="pickup_window_start" required>
+                  <div class="form-floating">
+                    <input v-model="food_name" type="text" class="form-control" id="food_name" placeholder="e.g., Bread, Apples" required />
+                    <label for="food_name">Food Item Name</label>
                   </div>
                 </div>
                 <div class="col-md-6">
-                  <div class="mb-3">
-                    <label for="pickup_window_end" class="form-label">Pickup Window End</label>
-                    <input type="datetime-local" class="form-control" id="pickup_window_end" v-model="pickup_window_end" required>
+                  <div class="form-floating">
+                    <input v-model.number="original_quantity" type="number" class="form-control" id="original_quantity" min="1" placeholder="10" required />
+                    <label for="original_quantity">Quantity (servings)</label>
                   </div>
                 </div>
+                <div class="col-md-6">
+                  <div class="form-floating">
+                    <input v-model="expiry_date" type="date" class="form-control" id="expiry_date" required :min="today" />
+                    <label for="expiry_date">Best Before</label>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="form-floating">
+                    <input type="datetime-local" class="form-control" id="pickup_window_start" v-model="pickup_window_start" required :min="now">
+                    <label for="pickup_window_start">Pickup From</label>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="form-floating">
+                    <input type="datetime-local" class="form-control" id="pickup_window_end" v-model="pickup_window_end" required :min="pickup_window_start">
+                    <label for="pickup_window_end">Pickup Until</label>
+                  </div>
+                </div>
+                 <div class="col-12">
+                  <label class="form-label">Pickup Location</label>
+                  <GoogleMapPicker v-model="location" aspect-ratio="16/9" placeholder="Search or pick location..." />
+                </div>
+                <div class="col-12">
+                  <div class="form-floating">
+                    <textarea v-model="special_instructions" class="form-control" id="special_instructions" placeholder="Instructions" style="height: 100px"></textarea>
+                    <label for="special_instructions">Special Instructions (optional)</label>
+                  </div>
+                </div>
+                <div class="col-12">
+                  <FoodImageUploader v-model="food_image_base64" />
+                </div>
               </div>
-              <div class="mb-3">
-                <label class="form-label">Pickup Location</label>
-                <GoogleMapPicker v-model="location" aspect-ratio="16/9" placeholder="Search or pick location..." />
+
+              <div v-if="error" class="alert alert-danger mt-4">{{ error }}</div>
+              <div v-if="success" class="alert alert-success mt-4">{{ success }}</div>
+
+              <div class="d-grid mt-4">
+                <button type="submit" class="btn btn-primary btn-lg">
+                  <i class="fas fa-paper-plane me-2"></i>Submit Donation
+                </button>
               </div>
-              <div class="mb-3">
-                <label for="special_instructions" class="form-label">Special Instructions</label>
-                <textarea v-model="special_instructions" class="form-control" id="special_instructions" rows="2"></textarea>
-              </div>
-              <div class="mb-3">
-                <FoodImageUploader v-model="food_image_base64" />
-              </div>
-              <div class="d-grid">
-                <button type="submit" class="btn btn-primary">Submit Donation</button>
-              </div>
-              <div v-if="error" class="alert alert-danger mt-3">{{ error }}</div>
-              <div v-if="success" class="alert alert-success mt-3">{{ success }}</div>
             </form>
           </div>
         </div>

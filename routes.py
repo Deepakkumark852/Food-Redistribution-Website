@@ -460,6 +460,47 @@ def init_routes(app, mysql):
         volunteering = [serialize_row(v) for v in volunteering]
         return jsonify({'volunteering': volunteering})
 
+    @app.route('/api/volunteer/accept/<int:request_id>', methods=['POST'])
+    @role_required('volunteer', 'admin')
+    def accept_request(request_id):
+        claims = get_jwt()
+        volunteer_id = claims.get('id')
+        
+        cur = mysql.connection.cursor()
+        try:
+            # Check if volunteer already has an active assignment
+            cur.execute("SELECT id FROM requests WHERE volunteer_id = %s AND status NOT IN ('completed', 'cancelled')", [volunteer_id])
+            active_assignment = cur.fetchone()
+            if active_assignment:
+                return jsonify({'error': 'You already have an active assignment.'}), 409
+
+            # Check if the request is available to be accepted
+            cur.execute("SELECT * FROM requests WHERE id = %s AND status = 'pending'", [request_id])
+            request_to_accept = cur.fetchone()
+            if not request_to_accept:
+                return jsonify({'error': 'Request not available or already assigned.'}), 404
+
+            # Check if the volunteer is trying to accept their own donation request
+            cur.execute("SELECT d.donor_id FROM donations d JOIN requests r ON d.id = r.food_id WHERE r.id = %s", [request_id])
+            donor_info = cur.fetchone()
+            if donor_info and donor_info['donor_id'] == volunteer_id:
+                return jsonify({'error': 'You cannot accept your own donation request.'}), 403
+
+            # Assign the request to the volunteer
+            cur.execute("""
+                UPDATE requests 
+                SET volunteer_id = %s, status = 'assigned', assigned_at = %s
+                WHERE id = %s
+            """, (volunteer_id, datetime.utcnow(), request_id))
+            
+            mysql.connection.commit()
+            return jsonify({'msg': 'Request accepted successfully!'})
+        except Exception as e:
+            mysql.connection.rollback()
+            return jsonify({'error': str(e)}), 500
+        finally:
+            cur.close()
+
     # ========== VERIFICATION FLOW API ROUTES ==========
 
     @app.route('/api/assignments/initiate-pickup/<int:request_id>', methods=['POST'])

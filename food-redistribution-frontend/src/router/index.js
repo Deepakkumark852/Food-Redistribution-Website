@@ -35,42 +35,50 @@ const router = createRouter({
 // Navigation guard for RBAC and session expiry
 router.beforeEach((to, from, next) => {
   const { roles, requiresAuth } = to.meta;
-  const isAuthenticated = store.getters.isAuthenticated;
+  let isAuthenticated = store.getters.isAuthenticated;
 
-  // Restore user from localStorage if store is empty (e.g., on reload)
+  // Try to restore user from localStorage if the store is not yet populated
   if (!isAuthenticated && localStorage.getItem('user')) {
     try {
       const user = JSON.parse(localStorage.getItem('user'));
-      if (user && user.token && user.roles && user.username) {
+      if (user && user.token) {
         store.commit('setUser', user);
+        isAuthenticated = true; // Update status after commit
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      console.error("Failed to parse user from localStorage", e);
+      localStorage.removeItem('user'); // Clear corrupted data
+    }
   }
 
   const userRoles = store.getters.roles;
-  const token = store.getters.token;
 
-  // If route requires auth and user is not logged in, redirect to login
-  if (requiresAuth && !token) {
+  // 1. If user is logged in and tries to access login/register, redirect to home
+  if (isAuthenticated && (to.path === '/login' || to.path === '/register')) {
+    return next('/home');
+  }
+
+  // 2. If route requires authentication and user is not logged in, redirect to login
+  if (requiresAuth && !isAuthenticated) {
     return next('/login');
   }
 
-  // If route has role restrictions
+  // 3. If route requires specific roles
   if (roles) {
-    if (!token) {
-      // No token, force login
-      return next('/login');
+    if (!isAuthenticated) {
+      return next('/login'); // Should be caught by #2, but good for safety
     }
-    if (roles.some(r => userRoles.includes(r))) {
-      return next(); // User has required role
-    } else {
-      // User does not have the required role, redirect to home or a 'forbidden' page
-      return next('/home'); 
+    
+    const hasRequiredRole = userRoles.some(userRole => roles.includes(userRole));
+    
+    if (!hasRequiredRole) {
+      // User does not have the required role, redirect to home
+      return next('/home');
     }
   }
 
-  // For all other routes, allow access
-  return next();
+  // 4. Otherwise, allow navigation
+  next();
 });
 
 // Axios response interceptor for session expiry

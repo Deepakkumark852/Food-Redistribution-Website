@@ -1,107 +1,108 @@
 <template>
   <div class="modal fade" :id="'requestModal' + foodId" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Request Food</h5>
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content" style="border-radius: 16px;">
+        <div class="modal-header border-0">
+          <h4 class="modal-title fw-bold" id="modalTitle">
+            <i class="fas fa-hand-holding-heart me-2 text-primary"></i>Request Food
+          </h4>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="modal-body">
-      <!-- Error message -->
-      <div v-if="error" class="alert alert-danger" role="alert">
-        {{ error }}
-      </div>
+        <div class="modal-body p-4">
+          <div v-if="error" class="alert alert-danger" role="alert">
+            {{ error }}
+          </div>
+          
           <div v-if="!submitted">
-            <div class="mb-3">
-              <label class="form-label">Number of Servings</label>
-              <input 
-                type="number" 
-                class="form-control" 
-                v-model="servings" 
-                min="1" 
-                :max="maxServings"
-                required
-              >
-              <div class="form-text">Available: {{ maxServings }} servings</div>
-            </div>
-            
-            <div class="mb-3">
-              <div class="form-check mb-2">
-                <input 
-                  class="form-check-input" 
-                  type="radio" 
-                  id="pickup" 
-                  value="pickup" 
-                  v-model="deliveryType"
-                >
-                <label class="form-check-label" for="pickup">
-                  Self Pickup
-                </label>
-              </div>
-              <div class="form-check mb-3">
-                <input 
-                  class="form-check-input" 
-                  type="radio" 
-                  id="delivery" 
-                  value="delivery" 
-                  v-model="deliveryType"
-                >
-                <label class="form-check-label" for="delivery">
-                  Delivery Required
-                </label>
-              </div>
-            </div>
+            <div class="row g-4">
+              <!-- Left Column: Form -->
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label for="servings" class="form-label fw-bold">How many servings do you need?</label>
+                  <input 
+                    type="number" 
+                    class="form-control" 
+                    id="servings"
+                    v-model="servings" 
+                    min="1" 
+                    :max="maxServings"
+                    required
+                  >
+                  <div class="form-text">Up to {{ maxServings }} servings available.</div>
+                </div>
+                
+                <div class="mb-3">
+                  <label class="form-label fw-bold">How will you get it?</label>
+                  <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" id="pickup" value="pickup" v-model="deliveryType">
+                    <label class="form-check-label" for="pickup">I'll pick it up</label>
+                  </div>
+                  <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" id="delivery" value="delivery" v-model="deliveryType">
+                    <label class="form-check-label" for="delivery">I need delivery</label>
+                  </div>
+                </div>
 
-            <div v-if="deliveryType === 'delivery'" class="mb-3">
-              <label class="form-label">Delivery Address</label>
-              <input 
-                type="text" 
-                class="form-control mb-2" 
-                v-model="deliveryAddress"
-                placeholder="Enter delivery address"
-                ref="addressInput"
-                required
-              >
-              <div class="form-text">
-                <GoogleMapSingleMarker 
-                  v-if="deliveryLocation.lat"
-                  :lat="deliveryLocation.lat" 
-                  :lng="deliveryLocation.lng" 
-                  :markerTitle="'Delivery Location'"
-                  height="200px"
-                />
+                <div v-if="deliveryType === 'delivery'" class="mb-3 animate__animated animate__fadeIn">
+                  <label for="deliveryAddress" class="form-label fw-bold">Delivery Address</label>
+                  <input 
+                    type="text" 
+                    class="form-control" 
+                    id="deliveryAddress"
+                    v-model="deliveryAddress"
+                    placeholder="Start typing your address..."
+                    ref="addressInput"
+                    required
+                  >
+                </div>
               </div>
-            </div>
 
-            <div class="alert alert-info">
-              <strong>Pickup Location:</strong> {{ pickupAddress }}
+              <!-- Right Column: Map -->
+              <div class="col-md-6">
+                <div class="map-info-box h-100 p-3 rounded">
+                  <h6 class="fw-bold">
+                    <i class="fas fa-map-marked-alt me-2"></i>
+                    {{ deliveryType === 'pickup' ? 'Pickup Location' : 'Delivery Location' }}
+                  </h6>
+                  <p v-if="deliveryType === 'pickup'" class="small text-muted">{{ pickupAddress }}</p>
+                  
+                  <div class="map-container-modal rounded overflow-hidden">
+                    <GoogleMapSingleMarker 
+                      v-if="mapLocation.lat"
+                      :key="`${mapLocation.lat}-${mapLocation.lng}`"
+                      :lat="mapLocation.lat" 
+                      :lng="mapLocation.lng" 
+                      :markerTitle="deliveryType === 'pickup' ? 'Pickup' : 'Delivery'"
+                      aspect-ratio="16/9"
+                    />
+                    <div v-else class="d-flex align-items-center justify-content-center h-100 bg-light">
+                      <p class="text-muted">Map will appear here.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           
-          <div v-else class="text-center p-4">
-            <div class="spinner-border text-primary mb-3" role="status" v-if="loading"></div>
-            <div v-else>
-              <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
-              <h5 class="mt-3">Request Submitted Successfully!</h5>
-              <p>Your request has been received. The donor will contact you soon.</p>
-            </div>
+          <!-- Submission Success -->
+          <div v-else class="text-center p-5">
+            <i class="fas fa-check-circle text-success fa-4x mb-3"></i>
+            <h3 class="fw-bold">Request Submitted!</h3>
+            <p class="text-muted">Your request has been sent. You will be notified of the next steps.</p>
           </div>
         </div>
         
-        <div class="modal-footer" v-if="!submitted">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <div class="modal-footer border-0 p-3" v-if="!submitted">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
           <button 
             type="button" 
             class="btn btn-primary" 
             @click="submitRequest"
-            :disabled="loading"
+            :disabled="loading || !isFormValid"
           >
-            <span v-if="loading" class="spinner-border spinner-border-sm me-1"></span>
-            Submit Request
+            <span v-if="loading" class="spinner-border spinner-border-sm me-2"></span>
+            {{ loading ? 'Submitting...' : 'Confirm Request' }}
           </button>
-        </div>
-        <div class="modal-footer" v-else>
-          <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
         </div>
       </div>
     </div>
@@ -147,284 +148,163 @@ const loading = ref(false);
 const submitted = ref(false);
 const error = ref(null);
 const addressInput = ref(null);
+let modalInstance = null;
 let autocomplete = null;
-let modal = null;
 
-const isFormValid = computed(() => {
-  if (deliveryType.value === 'delivery') {
-    return servings.value > 0 && deliveryAddress.value.trim() !== '' && deliveryLocation.value.lat !== null;
+const mapLocation = computed(() => {
+  if (deliveryType.value === 'delivery' && deliveryLocation.value.lat) {
+    return deliveryLocation.value;
   }
-  return servings.value > 0;
+  return props.initialLocation;
 });
 
-// Initialize Google Places Autocomplete
-const initAutocomplete = () => {
-  console.log('Attempting to initialize autocomplete...');
-  console.log('Google available:', !!window.google);
-  console.log('Google Maps available:', !!(window.google && window.google.maps));
-  console.log('Google Places available:', !!(window.google && window.google.maps && window.google.maps.places));
-  console.log('Address input available:', !!addressInput.value);
-  
-  if (window.google && window.google.maps && window.google.maps.places && addressInput.value) {
-    console.log('Creating autocomplete instance...');
-    autocomplete = new window.google.maps.places.Autocomplete(
-      addressInput.value,
-      { 
-        types: ['establishment', 'geocode'],
-        componentRestrictions: { country: 'IN' }
-      }
-    );
-    
-    console.log('Autocomplete created successfully');
-    
-    autocomplete.addListener('place_changed', () => {
-      const place = autocomplete.getPlace();
-      console.log('Place changed:', place);
-      if (place.geometry) {
-        deliveryAddress.value = place.formatted_address || place.name;
-        deliveryLocation.value = {
-          lat: place.geometry.location.lat(),
-          lng: place.geometry.location.lng(),
-          address: place.formatted_address || place.name
-        };
-      }
-    });
-  } else {
-    console.log('Prerequisites not met, retrying in 100ms...');
-    setTimeout(initAutocomplete, 100);
+const isFormValid = computed(() => {
+  if (deliveryType.value === 'pickup') {
+    return servings.value > 0;
   }
-};
-
-// Set initial delivery location from props or localStorage
-const setInitialLocation = () => {
-  // First try to get from localStorage (from search in RequestView)
-  const storedLocation = localStorage.getItem('lastSearchedLocation');
-  if (storedLocation) {
-    try {
-      const location = JSON.parse(storedLocation);
-      if (location.address) {
-        deliveryAddress.value = location.address;
-        deliveryLocation.value = { ...location };
-        return;
-      }
-    } catch (e) {
-      console.error('Error parsing stored location:', e);
-    }
-  }
-
-  // Then try to get from props (passed from parent)
-  if (props.initialLocation?.address) {
-    deliveryAddress.value = props.initialLocation.address;
-    deliveryLocation.value = { ...props.initialLocation };
-    return;
-  }
-  
-  // If still no location, try to get current location
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const newLocation = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude
-        };
-        
-        // Try to get address from coordinates
-        if (window.google?.maps) {
-          const geocoder = new window.google.maps.Geocoder();
-          geocoder.geocode(
-            { location: newLocation },
-            (results, status) => {
-              if (status === 'OK' && results[0]) {
-                deliveryLocation.value = {
-                  ...newLocation,
-                  address: results[0].formatted_address
-                };
-                deliveryAddress.value = results[0].formatted_address;
-              }
-            }
-          );
-        }
-      },
-      (error) => {
-        console.error('Error getting current location:', error);
-      }
-    );
-  }
-};
+  return servings.value > 0 && deliveryLocation.value.lat && deliveryLocation.value.lng;
+});
 
 const submitRequest = async () => {
-  console.log('Submit button clicked!');
-  console.log('Form valid:', isFormValid.value);
-  console.log('Servings:', servings.value);
-  console.log('Delivery type:', deliveryType.value);
-  console.log('Delivery address:', deliveryAddress.value);
-  
+  error.value = null;
   if (!isFormValid.value) {
-    console.log('Form is not valid, returning early');
+    error.value = 'Please fill out all required fields, including a valid delivery address if needed.';
     return;
   }
-  
-  loading.value = true;
-  error.value = null;
-  
-  try {
-    const requestData = {
-      food_id: props.foodId,
-      quantity: parseInt(servings.value),
-      delivery_address: deliveryType.value === 'delivery' ? deliveryAddress.value : '',
-      transport_arranged: deliveryType.value === 'pickup',
-      status: 'pending'
-    };
 
-    // Include delivery location if it's a delivery
-    if (deliveryType.value === 'delivery' && deliveryLocation.value.lat && deliveryLocation.value.lng) {
-      requestData.delivery_latitude = deliveryLocation.value.lat;
-      requestData.delivery_longitude = deliveryLocation.value.lng;
-    }
-    
-    console.log('Submitting request with data:', requestData);
-    
-    const response = await api.post('/requests', requestData);
-    console.log('Request submitted successfully:', response.data);
-    
+  const payload = {
+    food_id: props.foodId,
+    quantity: servings.value,
+    request_type: deliveryType.value,
+    delivery_address: deliveryType.value === 'delivery' ? deliveryLocation.value.address : null,
+    delivery_lat: deliveryType.value === 'delivery' ? deliveryLocation.value.lat : null,
+    delivery_lng: deliveryType.value === 'delivery' ? deliveryLocation.value.lng : null,
+  };
+
+  try {
+    loading.value = true;
+    await api.post('/request', payload);
     submitted.value = true;
     emit('request-submitted');
-    
-    // Show success message and close modal after a short delay
-    setTimeout(() => {
-      const modal = Modal.getInstance(document.getElementById(`requestModal${props.foodId}`));
-      if (modal) modal.hide();
-    }, 1500);
-    
-  } catch (error) {
-    console.error('Error submitting request:', error);
-    const errorMessage = error.response?.data?.error || 
-                        error.response?.data?.message || 
-                        'Failed to submit request. Please try again.';
-    error.value = errorMessage;
-    console.error('Error details:', error.response?.data);
+  } catch (e) {
+    error.value = e.response?.data?.error || 'An error occurred while submitting your request.';
   } finally {
     loading.value = false;
   }
 };
 
-// Initialize modal when component is mounted
-onMounted(() => {
-  console.log('RequestFoodModal mounted');
-  modal = new Modal(document.getElementById(`requestModal${props.foodId}`));
-  setInitialLocation();
-});
-
-// Clean up autocomplete when component is unmounted
-onUnmounted(() => {
-  if (autocomplete) {
-    window.google.maps.event.clearInstanceListeners(autocomplete);
+const show = () => {
+  if (modalInstance) {
+    resetForm();
+    modalInstance.show();
   }
-});
+};
 
-// Watch for delivery type changes to initialize autocomplete
-watch(deliveryType, (newType) => {
-  if (newType === 'delivery') {
-    // Wait for DOM to update and show the input field
-    nextTick(() => {
-      console.log('Delivery type changed to delivery, initializing autocomplete...');
-      setTimeout(() => {
-        if (addressInput.value) {
-          console.log('Address input now available, initializing...');
-          initAutocomplete();
-        }
-      }, 100);
+const hide = () => {
+  if (modalInstance) {
+    modalInstance.hide();
+  }
+};
+
+const resetForm = () => {
+  servings.value = 1;
+  deliveryType.value = 'pickup';
+  deliveryAddress.value = '';
+  deliveryLocation.value = { lat: null, lng: null, address: '' };
+  error.value = null;
+  submitted.value = false;
+};
+
+const initAutocomplete = () => {
+  nextTick(() => {
+    if (!addressInput.value) {
+      console.error("Address input element not found for autocomplete.");
+      return;
+    }
+    if (!window.google || !window.google.maps.places) {
+      console.warn("Google Places API not ready for autocomplete.");
+      return;
+    }
+    
+    if (autocomplete) {
+        google.maps.event.clearInstanceListeners(autocomplete);
+    }
+
+    autocomplete = new google.maps.places.Autocomplete(addressInput.value, {
+      fields: ["address_components", "geometry", "icon", "name", "formatted_address"],
+    });
+
+    autocomplete.addListener('place_changed', () => {
+      const place = autocomplete.getPlace();
+      if (place.geometry) {
+        deliveryLocation.value = {
+          lat: place.geometry.location.lat(),
+          lng: place.geometry.location.lng(),
+          address: place.formatted_address,
+        };
+        deliveryAddress.value = place.formatted_address;
+      } else {
+        deliveryLocation.value = { lat: null, lng: null, address: '' };
+      }
+    });
+  });
+};
+
+onMounted(() => {
+  const modalEl = document.getElementById('requestModal' + props.foodId);
+  if (modalEl) {
+    modalInstance = new Modal(modalEl);
+    modalEl.addEventListener('hidden.bs.modal', resetForm);
+    modalEl.addEventListener('shown.bs.modal', () => {
+      if (deliveryType.value === 'delivery') {
+        initAutocomplete();
+      }
     });
   }
 });
 
-// Watch for changes in delivery address
-watch(deliveryAddress, (newVal) => {
-  if (!newVal) {
-    deliveryLocation.value = { lat: null, lng: null, address: '' };
+onUnmounted(() => {
+  if (modalInstance) {
+    const modalEl = document.getElementById('requestModal' + props.foodId);
+    if (modalEl) {
+      modalEl.removeEventListener('hidden.bs.modal', resetForm);
+    }
+    modalInstance.dispose();
+  }
+  if (autocomplete && window.google) {
+    google.maps.event.clearInstanceListeners(autocomplete);
   }
 });
 
-// Expose show and hide methods
-const show = () => modal?.show();
-const hide = () => modal?.hide();
-
-defineExpose({
-  show,
-  hide
+watch(deliveryType, (newVal) => {
+  if (newVal === 'delivery') {
+    initAutocomplete();
+  }
 });
+
+defineExpose({ show, hide });
 </script>
 
-<style scoped>
-.modal-content {
-  border-radius: 12px;
-}
-.modal-header {
-  border-bottom: 1px solid #dee2e6;
-  background-color: #f8f9fa;
-  border-top-left-radius: 12px;
-  border-top-right-radius: 12px;
-}
-.modal-footer {
-  border-top: 1px solid #dee2e6;
-  background-color: #f8f9fa;
-  border-bottom-left-radius: 12px;
-  border-bottom-right-radius: 12px;
+<style>
+/* This will ensure the Google Places dropdown appears above the modal */
+.pac-container {
+  z-index: 1056 !important; /* Bootstrap modals are z-index 1055 */
 }
 </style>
 
-<style>
-/* Global styles for Google Places Autocomplete dropdown */
-.pac-container {
-  z-index: 9999 !important;
-  border-radius: 8px !important;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
-  border: 1px solid #dee2e6 !important;
+<style scoped>
+@import url('https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css');
+
+.map-info-box {
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  min-height: 250px;
+  display: flex;
+  flex-direction: column;
 }
 
-.pac-item {
-  padding: 12px 16px !important;
-  border-bottom: 1px solid #f1f3f4 !important;
-  cursor: pointer !important;
-}
-
-.pac-item:hover {
-  background-color: #f8f9fa !important;
-}
-
-.pac-item-selected {
-  background-color: #e3f2fd !important;
-}
-
-.pac-matched {
-  font-weight: 600 !important;
-  color: #1976d2 !important;
-}
-
-.pac-item-query {
-  font-size: 14px !important;
-  color: #333 !important;
-}
-
-.pac-secondary {
-  font-size: 12px !important;
-  color: #666 !important;
-}
-
-/* Ensure modal doesn't interfere with autocomplete */
-.modal {
-  overflow: visible !important;
-}
-
-.modal-dialog {
-  overflow: visible !important;
-}
-
-.modal-content {
-  overflow: visible !important;
-}
-
-.modal-body {
-  overflow: visible !important;
+.map-container-modal {
+  flex-grow: 1;
+  min-height: 200px;
 }
 </style>

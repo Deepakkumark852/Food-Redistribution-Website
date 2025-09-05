@@ -34,15 +34,10 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      const errorData = error.response.data;
-      // Check if it's an outdated token format error
-      if (errorData?.logout_required || errorData?.error?.includes('Token format outdated')) {
-        console.log('Outdated token detected, logging out user');
-        // Clear stored authentication data
-        store.dispatch('logout');
-        localStorage.removeItem('user');
-        localStorage.removeItem('token');
-        // Redirect to login page
+      console.error("Authentication error (401). Token is invalid or expired. Logging out.");
+      // Prevent looping API calls by checking if we are already on the login page
+      if (window.location.pathname !== '/login') {
+        store.commit('logout');
         window.location.href = '/login';
       }
     }

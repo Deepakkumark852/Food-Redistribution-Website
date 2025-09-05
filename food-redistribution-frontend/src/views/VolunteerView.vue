@@ -1,23 +1,33 @@
 <template>
-  <div class="container py-3">
+  <div class="volunteer-view-container container-fluid py-4 px-lg-5">
     <!-- Current Assignment Section -->
-    <div v-if="myAssignments.length > 0" class="row mb-4">
-      <div class="col-12">
-        <h3 class="mb-3"><i class="fas fa-clipboard-check me-2"></i>Current Assignment</h3>
-        <div v-for="assignment in myAssignments" :key="assignment.id" class="card p-3 mb-3 shadow-sm assignment-card">
-          <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between">
-            <div class="flex-grow-1">
-              <h5 class="mb-2">{{ assignment.food_name }}</h5>
-              <div class="mb-1"><b>Quantity:</b> {{ assignment.quantity }}</div>
-              <div class="mb-1"><b>Donor:</b> {{ assignment.donor_name }}</div>
-              <div class="mb-1"><b>Pickup:</b> {{ assignment.pickup_address }}</div>
-              <div class="mb-1"><b>Requester:</b> {{ assignment.requester_name }}</div>
-              <div class="mb-1"><b>Delivery:</b> {{ assignment.delivery_address || 'Address pending' }}</div>
-              <div class="mb-1"><b>Status:</b> <span class="badge bg-primary">{{ assignment.status }}</span></div>
+    <div v-if="myAssignments.length > 0" class="mb-5 animate__animated animate__fadeIn">
+      <h2 class="mb-3 fw-bold">
+        <i class="fas fa-clipboard-check me-2 text-primary"></i>Your Current Assignment
+      </h2>
+      <div v-for="assignment in myAssignments" :key="assignment.id" class="card assignment-card-new shadow-lg border-0">
+        <div class="card-body p-4">
+          <div class="row align-items-center">
+            <div class="col-md-8">
+              <h4 class="card-title fw-bold mb-3">{{ assignment.food_name }}</h4>
+              <div class="row">
+                <div class="col-lg-6">
+                  <p class="mb-2"><strong><i class="fas fa-user-tag me-2 text-muted"></i>Donor:</strong> {{ assignment.donor_name }}</p>
+                  <p class="mb-2"><strong><i class="fas fa-map-marker-alt me-2 text-muted"></i>Pickup:</strong> {{ assignment.pickup_address }}</p>
+                </div>
+                <div class="col-lg-6">
+                  <p class="mb-2"><strong><i class="fas fa-user-check me-2 text-muted"></i>Requester:</strong> {{ assignment.requester_name }}</p>
+                  <p class="mb-2"><strong><i class="fas fa-location-arrow me-2 text-muted"></i>Delivery:</strong> {{ assignment.delivery_address || 'Address pending' }}</p>
+                </div>
+              </div>
+              <div class="mt-3">
+                <span class="badge rounded-pill fs-6" :class="statusBadgeClass(assignment.status)">{{ formatStatus(assignment.status) }}</span>
+                <span class="ms-3"><strong>Quantity:</strong> {{ assignment.quantity }}</span>
+              </div>
             </div>
-            <div class="ms-md-4 mt-2 mt-md-0">
-              <button class="btn btn-success btn-lg" @click="goToAssignmentDetails(assignment.id)">
-                <i class="fas fa-map-marked-alt me-2"></i>Start Delivery
+            <div class="col-md-4 text-md-end mt-4 mt-md-0">
+              <button class="btn btn-primary btn-lg w-100" @click="goToAssignmentDetails(assignment.id)">
+                <i class="fas fa-route me-2"></i>View Assignment
               </button>
             </div>
           </div>
@@ -25,69 +35,84 @@
       </div>
     </div>
 
-    <!-- Filters and Sort -->
-    <div class="row mb-3">
-      <div class="col-12 d-flex flex-wrap align-items-center gap-2">
-        <input v-model="filterFood" @input="applyFilters" class="form-control w-auto" placeholder="Search food name..." />
-        <select v-model="filterQuantity" @change="applyFilters" class="form-select w-auto">
-          <option value="">All Quantities</option>
-          <option value="small">Small (1-5)</option>
-          <option value="medium">Medium (6-15)</option>
-          <option value="large">Large (16+)</option>
-        </select>
-        <select v-model="sortBy" @change="applyFilters" class="form-select w-auto">
-          <option value="">Sort by...</option>
-          <option value="nearest_donor">Nearest Donor</option>
-          <option value="nearest_requester">Nearest Requester</option>
-          <option value="shortest_total">Shortest Total Distance</option>
-          <option value="quantity_asc">Quantity (Low to High)</option>
-          <option value="quantity_desc">Quantity (High to Low)</option>
-        </select>
-        <input ref="addressInput" class="form-control w-auto" placeholder="Your location..." style="min-width:220px;" />
-        <button class="btn btn-outline-secondary" @click="fetchData">Refresh</button>
-      </div>
-    </div>
-
     <!-- Pending Requests Section -->
-    <div class="row mb-3">
-      <div class="col-12">
-        <h3 class="mb-3">
-          <i class="fas fa-hand-paper me-2"></i>Pending Requests
-          <span v-if="myAssignments.length > 0" class="badge bg-warning ms-2">Complete current assignment first</span>
-        </h3>
-      </div>
-    </div>
+    <div class="pending-requests-section">
+      <h2 class="mb-4 fw-bold"><i class="fas fa-tasks me-2 text-secondary"></i>Pending Requests</h2>
 
-    <div class="row g-2">
-      <div class="col-12">
-        <div v-if="filteredRequests.length === 0" class="text-center py-5">
-          <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-          <p class="text-muted">No pending requests available</p>
+      <!-- Filters -->
+      <div class="card shadow-sm mb-4 filter-card">
+        <div class="card-body d-flex flex-wrap align-items-center gap-3">
+          <div class="flex-grow-1">
+            <input ref="addressInput" class="form-control" placeholder="Enter your location for distance calculation..." />
+          </div>
+          <div class="filter-group d-flex gap-3">
+            <input v-model="filterFood" @input="applyFilters" class="form-control" placeholder="Filter by food..." />
+            <select v-model="sortBy" @change="applyFilters" class="form-select">
+              <option value="">Sort by...</option>
+              <option value="shortest_total">Shortest Route</option>
+              <option value="nearest_donor">Nearest Pickup</option>
+              <option value="quantity_asc">Quantity (Low-High)</option>
+              <option value="quantity_desc">Quantity (High-Low)</option>
+            </select>
+          </div>
+          <button class="btn btn-outline-secondary" @click="fetchData" title="Refresh Data">
+            <i class="fas fa-sync-alt me-2"></i>Refresh
+          </button>
         </div>
-        <div v-for="request in filteredRequests" :key="request.id" 
-             :class="['request-card', { 'disabled': hasActiveAssignment }]">
-          <div class="card p-3 mb-2 shadow-sm w-100">
-            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between">
+      </div>
+      
+      <div v-if="hasActiveAssignment" class="alert alert-warning text-center">
+        <i class="fas fa-info-circle me-2"></i>
+        You must complete your current assignment before accepting a new one.
+      </div>
+
+      <!-- Requests List -->
+      <div v-if="filteredRequests.length === 0 && !loading" class="text-center py-5 my-5 card bg-light">
+        <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
+        <h4 class="text-muted">No pending requests right now.</h4>
+        <p>Check back later for new opportunities!</p>
+      </div>
+      
+      <div v-if="loading" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2">Loading requests...</p>
+      </div>
+
+      <div class="row g-4">
+        <div v-for="request in filteredRequests" :key="request.id" class="col-lg-6 col-xl-4 animate__animated animate__fadeInUp">
+          <div class="card h-100 request-card-new" :class="{ 'disabled': hasActiveAssignment }">
+            <div class="card-body d-flex flex-column">
+              <h5 class="card-title fw-bold">{{ request.food_name }}</h5>
+              <p class="card-subtitle mb-2 text-muted">Quantity: {{ request.quantity }}</p>
+              <hr>
               <div class="flex-grow-1">
-                <h5 class="mb-2">{{ request.food_name }}</h5>
-                <div class="mb-1"><b>Quantity:</b> {{ request.quantity }}</div>
-                <div class="mb-1"><b>Requester:</b> {{ request.requester_name }}</div>
-                <div class="mb-1"><b>Pickup from:</b> {{ request.pickup_address }}</div>
-                <div class="mb-1"><b>Deliver to:</b> {{ request.delivery_address || 'Address pending' }}</div>
-                <div v-if="request.donor_distance" class="mb-1"><b>Distance to Donor:</b> {{ request.donor_distance.toFixed(2) }} km</div>
-                <div v-if="request.requester_distance" class="mb-1"><b>Distance to Requester:</b> {{ request.requester_distance.toFixed(2) }} km</div>
-                <div v-if="request.total_distance" class="mb-1"><b>Total Distance:</b> {{ request.total_distance.toFixed(2) }} km</div>
-                <div v-if="request.special_instructions" class="small text-muted mt-2">{{ request.special_instructions }}</div>
+                <p class="mb-2"><i class="fas fa-map-pin me-2 text-danger"></i><strong>Pickup:</strong> {{ request.pickup_address }}</p>
+                <p class="mb-3"><i class="fas fa-flag-checkered me-2 text-success"></i><strong>Dropoff:</strong> {{ request.delivery_address || 'Address pending' }}</p>
+                
+                <div v-if="request.total_distance" class="distance-info alert alert-light p-2 text-center">
+                  <i class="fas fa-road me-2"></i>
+                  Approx. <strong>{{ request.total_distance.toFixed(1) }} km</strong> total
+                  <span class="d-block text-muted small">({{ request.donor_distance.toFixed(1) }}km to pickup, {{ request.requester_distance.toFixed(1) }}km to dropoff)</span>
+                </div>
+                
+                <p v-if="request.special_instructions" class="small text-muted mt-3 fst-italic">
+                  <i class="fas fa-info-circle me-1"></i> {{ request.special_instructions }}
+                </p>
               </div>
-              <div class="ms-md-4 mt-2 mt-md-0">
+              <div class="mt-4">
                 <button 
-                  class="btn btn-primary btn-lg"
+                  class="btn btn-primary w-100"
                   :disabled="hasActiveAssignment || acceptingRequest === request.id"
                   @click="acceptRequest(request.id)"
                 >
-                  <i v-if="acceptingRequest === request.id" class="fas fa-spinner fa-spin me-2"></i>
-                  <i v-else class="fas fa-check me-2"></i>
-                  {{ acceptingRequest === request.id ? 'Accepting...' : 'Accept' }}
+                  <span v-if="acceptingRequest === request.id">
+                    <i class="fas fa-spinner fa-spin me-2"></i>Accepting...
+                  </span>
+                  <span v-else>
+                    <i class="fas fa-check-circle me-2"></i>Accept Request
+                  </span>
                 </button>
               </div>
             </div>
@@ -108,6 +133,7 @@ const pendingRequests = ref([]);
 const myAssignments = ref([]);
 const userLocation = ref({ lat: null, lng: null });
 const acceptingRequest = ref(null);
+const loading = ref(true);
 
 // Filter and sort states
 const filterFood = ref('');
@@ -116,6 +142,19 @@ const sortBy = ref('');
 const addressInput = ref();
 
 const hasActiveAssignment = computed(() => myAssignments.value.length > 0);
+
+const formatStatus = (status) => {
+  return (status || '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+};
+
+const statusBadgeClass = (status) => {
+  if (status === 'completed') return 'bg-success';
+  if (status === 'assigned') return 'bg-primary';
+  if (status === 'in_transit') return 'bg-info text-dark';
+  if (status === 'pickup_verification_pending') return 'bg-warning text-dark';
+  if (status === 'delivery_verification_pending') return 'bg-warning text-dark';
+  return 'bg-secondary';
+};
 
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const R = 6371; // Earth's radius in km
@@ -149,16 +188,11 @@ const processRequestsWithDistances = (requests) => {
         request.delivery_latitude, request.delivery_longitude
       );
     }
-    
-    // Calculate total distance (volunteer -> donor -> requester)
-    if (processed.donor_distance && processed.requester_distance && 
-        request.donor_lat && request.donor_lng && 
-        request.delivery_latitude && request.delivery_longitude) {
-      const donorToRequester = calculateDistance(
-        request.donor_lat, request.donor_lng,
-        request.delivery_latitude, request.delivery_longitude
-      );
-      processed.total_distance = processed.donor_distance + donorToRequester;
+
+    // Calculate total distance if both are available
+    if (processed.donor_distance && processed.requester_distance) {
+      // This is a simple sum, not a route calculation. For a real app, use Directions API.
+      processed.total_distance = processed.donor_distance + processed.requester_distance;
     }
     
     return processed;
@@ -167,74 +201,88 @@ const processRequestsWithDistances = (requests) => {
 
 const filteredRequests = computed(() => {
   let filtered = processRequestsWithDistances(pendingRequests.value);
-  
-  // Apply filters
+
+  // Filter by food name
   if (filterFood.value) {
-    filtered = filtered.filter(req => 
+    filtered = filtered.filter(req =>
       req.food_name.toLowerCase().includes(filterFood.value.toLowerCase())
     );
   }
-  
-  if (filterQuantity.value) {
-    filtered = filtered.filter(req => {
-      const qty = parseInt(req.quantity);
-      switch (filterQuantity.value) {
-        case 'small': return qty >= 1 && qty <= 5;
-        case 'medium': return qty >= 6 && qty <= 15;
-        case 'large': return qty >= 16;
-        default: return true;
-      }
-    });
-  }
-  
-  // Apply sorting
+
+  // Sort
   if (sortBy.value) {
-    filtered.sort((a, b) => {
-      switch (sortBy.value) {
-        case 'nearest_donor':
-          return (a.donor_distance || Infinity) - (b.donor_distance || Infinity);
-        case 'nearest_requester':
-          return (a.requester_distance || Infinity) - (b.requester_distance || Infinity);
-        case 'shortest_total':
-          return (a.total_distance || Infinity) - (b.total_distance || Infinity);
-        case 'quantity_asc':
-          return parseInt(a.quantity) - parseInt(b.quantity);
-        case 'quantity_desc':
-          return parseInt(b.quantity) - parseInt(a.quantity);
-        default:
-          return 0;
-      }
-    });
+    switch (sortBy.value) {
+      case 'shortest_total':
+        filtered.sort((a, b) => (a.total_distance || Infinity) - (b.total_distance || Infinity));
+        break;
+      case 'nearest_donor':
+        filtered.sort((a, b) => (a.donor_distance || Infinity) - (b.donor_distance || Infinity));
+        break;
+      case 'quantity_asc':
+        filtered.sort((a, b) => a.quantity - b.quantity);
+        break;
+      case 'quantity_desc':
+        filtered.sort((a, b) => b.quantity - a.quantity);
+        break;
+    }
   }
-  
+
   return filtered;
 });
 
 const fetchData = async () => {
+  loading.value = true;
   try {
-    const pending = await api.get('/volunteer/pending');
-    const assigned = await api.get('/volunteer/assignments');
-    pendingRequests.value = pending.data.pending_requests || [];
-    myAssignments.value = assigned.data.assignments || [];
-    console.log('Fetched pending requests:', pendingRequests.value.length);
-    console.log('Fetched assignments:', myAssignments.value.length);
+    const [pendingRes, assignmentsRes] = await Promise.allSettled([
+      api.get('/volunteer/pending'),
+      api.get('/volunteer/assignments')
+    ]);
+
+    if (pendingRes.status === 'fulfilled') {
+      pendingRequests.value = pendingRes.value.data.pending_requests || [];
+    } else {
+      console.error("Error fetching pending requests:", pendingRes.reason);
+      pendingRequests.value = [];
+    }
+
+    if (assignmentsRes.status === 'fulfilled') {
+      myAssignments.value = assignmentsRes.value.data.assignments || [];
+    } else {
+      console.error("Error fetching assignments:", assignmentsRes.reason);
+      myAssignments.value = [];
+    }
   } catch (error) {
-    console.error('Error fetching volunteer data:', error);
+      console.error("Unexpected error in fetchData:", error);
+  } finally {
+    loading.value = false;
   }
 };
 
 const acceptRequest = async (requestId) => {
-  if (hasActiveAssignment.value) return;
-  
   acceptingRequest.value = requestId;
   try {
-    await api.post('/volunteer/accept', { request_id: requestId });
+    await api.post(`/volunteer/accept/${requestId}`);
     await fetchData(); // Refresh data
   } catch (error) {
-    console.error('Error accepting request:', error);
-    alert(error.response?.data?.error || 'Failed to accept request');
+    console.error("Error accepting request:", error);
   } finally {
     acceptingRequest.value = null;
+  }
+};
+
+const getUserLocation = () => {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        userLocation.value = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        };
+      },
+      err => {
+        console.warn(`Geolocation error: ${err.message}`);
+      }
+    );
   }
 };
 
@@ -243,89 +291,82 @@ const goToAssignmentDetails = (assignmentId) => {
 };
 
 const applyFilters = () => {
-  // Filters are applied automatically via computed property
+  // The computed property handles filtering automatically.
 };
 
 onMounted(() => {
   fetchData();
-  
-  // Get user's current location
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(pos => {
-      userLocation.value.lat = pos.coords.latitude;
-      userLocation.value.lng = pos.coords.longitude;
-    });
-  }
-  
-  // Setup Google Places Autocomplete
+  getUserLocation();
+
   const waitForGoogle = setInterval(() => {
-    if (window.google?.maps?.places) {
+    if (window.google && window.google.maps && window.google.maps.places) {
       clearInterval(waitForGoogle);
-      const autocomplete = new window.google.maps.places.Autocomplete(addressInput.value, {
-        fields: ['formatted_address', 'geometry']
+      const autocomplete = new google.maps.places.Autocomplete(addressInput.value, {
+        fields: ["geometry"],
       });
-      
       autocomplete.addListener('place_changed', () => {
         const place = autocomplete.getPlace();
         if (place.geometry) {
-          userLocation.value.lat = place.geometry.location.lat();
-          userLocation.value.lng = place.geometry.location.lng();
+          userLocation.value = {
+            lat: place.geometry.location.lat(),
+            lng: place.geometry.location.lng(),
+          };
         }
       });
     }
   }, 200);
+  setTimeout(() => clearInterval(waitForGoogle), 10000);
 });
 </script>
 
 <style scoped>
-.assignment-card {
-  border-left: 4px solid #28a745;
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-}
+@import url('https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css');
 
-.request-card {
-  transition: all 0.2s ease;
-}
-
-.request-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-}
-
-.request-card.disabled {
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-.request-card.disabled .card {
+.volunteer-view-container {
   background-color: #f8f9fa;
 }
 
-.card {
+.assignment-card-new {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  color: white;
+  border-radius: 16px;
+}
+
+.assignment-card-new .btn-primary {
+  background-color: #fff;
+  color: var(--primary-color);
   border: none;
+  font-weight: bold;
+}
+
+.filter-card {
   border-radius: 12px;
-  transition: all 0.2s ease;
+  background-color: var(--card-background);
 }
 
-.btn-lg {
-  padding: 0.75rem 1.5rem;
-  font-weight: 600;
+.request-card-new {
+  border-radius: 12px;
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  border: 1px solid var(--border-color);
+}
+
+.request-card-new:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 20px var(--shadow-color);
+}
+
+.request-card-new.disabled {
+  opacity: 0.6;
+  pointer-events: none;
+  background-color: #e9ecef;
+}
+
+.distance-info {
   border-radius: 8px;
+  font-size: 0.9rem;
 }
 
-.form-control, .form-select {
-  border-radius: 8px;
-  border: 1px solid #dee2e6;
-}
-
-.form-control:focus, .form-select:focus {
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 0.2rem rgba(79, 70, 229, 0.25);
-}
-
-.badge {
-  font-size: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 6px;
+.badge.rounded-pill {
+  padding: 0.5em 1em;
 }
 </style>

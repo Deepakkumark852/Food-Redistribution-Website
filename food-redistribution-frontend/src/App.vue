@@ -10,7 +10,7 @@ const showNavBar = computed(() => !['/login', '/register'].includes(route.path))
 <template>
   <div class="app-root d-flex flex-column min-vh-100">
     <NavBar v-if="showNavBar" />
-    <main class="flex-fill d-flex flex-column align-items-center justify-content-center main-content">
+    <main class="flex-fill d-flex flex-column" :class="{ 'main-content': showNavBar }">
       <router-view />
     </main>
   </div>

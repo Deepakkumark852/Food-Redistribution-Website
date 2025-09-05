@@ -1,8 +1,8 @@
 <template>
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+  <nav class="navbar navbar-expand-lg fixed-top navbar-dark">
     <div class="container-fluid">
       <router-link class="navbar-brand d-flex align-items-center" to="/home">
-        <i class="fas fa-utensils me-2"></i> Food Redistribution
+        <i class="fas fa-hands-helping me-2"></i> FoodShare
       </router-link>
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
@@ -25,47 +25,23 @@
             <router-link class="nav-link" to="/history">History</router-link>
           </li>
         </ul>
-        <ul class="navbar-nav ms-auto">
+        <ul class="navbar-nav ms-auto align-items-center">
           <template v-if="store.getters.isAuthenticated">
-            <li class="nav-item d-flex align-items-center me-2">
-              <span class="navbar-text text-light fw-semibold">
-                <i class="fas fa-user-circle me-1"></i> {{ username }} <span v-if="role">({{ role }})</span>
+            <li class="nav-item d-flex align-items-center me-3">
+              <span class="nav-link d-flex align-items-center">
+                <i class="fas fa-user-circle me-2 fs-5"></i>
+                <span>{{ username }}</span>
               </span>
             </li>
             <li class="nav-item">
-              <button class="btn btn-link text-light p-0 me-2" @click="showProfile = true" title="Profile">
-                <i class="fas fa-id-badge fa-lg"></i>
-              </button>
+              <a class="nav-link" href="#" @click.prevent="showProfile = true" title="Profile">
+                <i class="fas fa-id-badge fs-5"></i>
+              </a>
             </li>
             <li class="nav-item">
-              <button class="btn btn-outline-light btn-sm" @click="logout">
-                <i class="fas fa-sign-out-alt"></i> Logout
-              </button>
-            </li>
-            <li class="nav-item dropdown" v-if="unreadCount > 0">
-              <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                <i class="fas fa-bell"></i>
-                <span class="badge rounded-pill bg-danger">{{ unreadCount }}</span>
+              <a class="nav-link" href="#" @click.prevent="logout" title="Logout">
+                <i class="fas fa-sign-out-alt fs-5"></i>
               </a>
-              <ul class="dropdown-menu dropdown-menu-end">
-                <li v-for="notification in notifications" :key="notification.id" class="dropdown-item" :class="{ 'text-muted': notification.is_read }" @click="markAsRead(notification)">
-                  <small>
-                    <template v-if="!notification.is_read">
-                      <strong>{{ notification.title }}</strong>
-                      <div>{{ notification.message }}</div>
-                    </template>
-                    <template v-else>
-                      {{ notification.message }}
-                    </template>
-                  </small>
-                </li>
-                <li>
-                  <hr class="dropdown-divider">
-                </li>
-                <li>
-                  <a class="dropdown-item text-center" href="#" @click="markAllAsRead">Mark all as read</a>
-                </li>
-              </ul>
             </li>
           </template>
           <template v-else>
@@ -91,7 +67,6 @@ const store = useStore();
 const router = useRouter();
 const roles = computed(() => store.state.roles || []);
 const username = computed(() => store.state.username);
-const role = computed(() => roles.value.length > 0 ? roles.value.join(', ') : '');
 const showProfile = ref(false);
 
 const notifications = ref([]);
@@ -104,10 +79,11 @@ const isVolunteerOrAdmin = computed(() => roles.value.includes('volunteer') || r
 const fetchNotifications = async () => {
   if (store.getters.isAuthenticated) {
     try {
-      const response = await api.getNotifications();
+      const response = await api.get('/notifications');
       notifications.value = response.data.notifications;
     } catch (error) {
       console.error('Failed to fetch notifications:', error);
+      notifications.value = []; // Ensure it's an array on failure
     }
   }
 };
@@ -115,22 +91,38 @@ const fetchNotifications = async () => {
 const markAsRead = async (notification) => {
   if (!notification.is_read) {
     try {
-      await api.markNotificationAsRead(notification.id);
+      await api.post(`/notifications/${notification.id}/read`);
       notification.is_read = true;
     } catch (error) {
       console.error('Failed to mark notification as read:', error);
     }
   }
-  // Navigate to the link if it exists
-  if (notification.link) {
-    router.push(notification.link);
-  }
+  // Optional: navigate to a relevant page
+  // router.push(notification.link);
+};
+
+const timeAgo = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const now = new Date();
+  const seconds = Math.floor((now - date) / 1000);
+  let interval = seconds / 31536000;
+  if (interval > 1) return Math.floor(interval) + " years ago";
+  interval = seconds / 2592000;
+  if (interval > 1) return Math.floor(interval) + " months ago";
+  interval = seconds / 86400;
+  if (interval > 1) return Math.floor(interval) + " days ago";
+  interval = seconds / 3600;
+  if (interval > 1) return Math.floor(interval) + " hours ago";
+  interval = seconds / 60;
+  if (interval > 1) return Math.floor(interval) + " minutes ago";
+  return Math.floor(seconds) + " seconds ago";
 };
 
 onMounted(() => {
-  fetchNotifications();
-  // Poll for new notifications every 60 seconds
-  setInterval(fetchNotifications, 60000);
+  if (store.getters.isAuthenticated) {
+    fetchNotifications();
+  }
 });
 
 const logout = () => {
@@ -141,38 +133,75 @@ const logout = () => {
 
 <style scoped>
 .navbar {
-  font-size: 1.08rem;
-  background: linear-gradient(90deg, #4F46E5 60%, #6366F1 100%);
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  transition: background 0.3s ease;
 }
+
 .navbar-brand {
   font-weight: 700;
-  font-size: 1.3rem;
-  letter-spacing: 1px;
+  font-size: 1.5rem;
 }
+
 .nav-link {
-  color: #fff !important;
-  transition: color 0.2s;
-}
-.nav-link.router-link-exact-active, .nav-link.active {
-  color: #FFD700 !important;
-  font-weight: 600;
-}
-.btn-outline-light {
-  border-radius: 20px;
-  padding: 0.3rem 1.1rem;
   font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
+  transition: color 0.2s;
+  position: relative;
 }
-.navbar-text {
-  font-size: 1rem;
+
+.nav-link:hover,
+.nav-link.router-link-exact-active {
+  color: white;
 }
-.btn-link {
-  color: #fff;
-  text-decoration: none;
+
+.nav-link.router-link-exact-active::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 10%;
+  width: 80%;
+  height: 2px;
+  background: var(--secondary-color);
+  border-radius: 2px;
 }
-.btn-link:hover {
-  color: #FFD700;
+
+.notification-badge {
+  position: absolute;
+  top: 10px;
+  right: -5px;
+  font-size: 0.6em;
 }
-.dropdown-item {
+
+.notification-dropdown {
+  width: 350px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px var(--shadow-color);
+  padding: 0;
+}
+
+.notification-dropdown .dropdown-item {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  white-space: normal;
   cursor: pointer;
+}
+
+.notification-dropdown .dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.notification-dropdown .dropdown-item.unread {
+  background-color: #f0f8ff;
+}
+
+.notification-dropdown .dropdown-item:hover {
+  background-color: #f8f9fa;
+}
+
+.dropdown-menu {
+  border-radius: 12px;
+  box-shadow: 0 8px 20px var(--shadow-color);
 }
 </style>
